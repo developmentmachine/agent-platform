@@ -37,6 +37,9 @@ async def _app_lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
+    from fastapi import Response
+    from fastapi.responses import RedirectResponse
+
     app = FastAPI(
         title="Stock Daily Recap API",
         description="企业级 A 股日终复盘智能体 API（含 NDJSON 流式 /v1/recap/stream）",
@@ -48,4 +51,13 @@ def create_app() -> FastAPI:
     app.include_router(recap_router)
     app.include_router(feedback_router)
     app.include_router(jobs_router)
+
+    @app.get("/", include_in_schema=False)
+    async def root():
+        return RedirectResponse(url="/docs")
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon():
+        return Response(content=b"", media_type="image/x-icon")
+
     return app
