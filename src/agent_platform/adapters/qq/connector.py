@@ -65,14 +65,22 @@ class QqBotConnector:
         self._reply_sender = reply_sender or self._default_reply_sender
 
     def start(self) -> None:
+        """阻塞运行：构造 botpy.Client 并启动 WS 长连接。
+
+        生产建议放在独立进程或线程；测试 / mock 场景请直接调
+        ``handle_group_message`` / ``handle_c2c_message`` 模拟入站。
+        """
         if not self._opts.enabled:
             logger.info("qq bot connector disabled")
             return
         if not (self._opts.app_id and self._opts.app_secret):
             logger.warning("qq bot connector missing app_id/app_secret; not starting")
             return
-        # TODO(next-commit): 接入 botpy / 自实现 WebSocket
-        logger.info("qq bot connector scaffolded (SDK integration pending)")
+        from agent_platform.adapters.qq.botpy_client import build_botpy_client
+
+        client = build_botpy_client(self)
+        logger.info("qq bot connector starting botpy WS: app_id=%s", self._opts.app_id)
+        client.run(appid=self._opts.app_id, secret=self._opts.app_secret)
 
     def handle_group_message(self, frame: Dict[str, Any]) -> Optional[str]:
         return self._dispatch(frame, kind="group")
