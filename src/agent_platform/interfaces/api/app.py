@@ -16,12 +16,7 @@ from fastapi import FastAPI
 
 from agent_platform.config.settings import get_settings
 from agent_platform.interfaces.api.middleware import install_cors
-from agent_platform.interfaces.api.v1 import (
-    feedback_router,
-    jobs_router,
-    ops_router,
-    recap_router,
-)
+from agent_platform.interfaces.api.v1 import jobs_router, ops_router
 
 
 @asynccontextmanager
@@ -36,21 +31,60 @@ async def _app_lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
+def _load_registry():
+    """触发 builtin agent 注册 + entry_points 发现。
+
+    HTTP 入口可以在 ``app.include_router`` 之前安全调用 — 不会启动事件循环。
+    """
+    from agent_platform.agents.stock_recap import manifest as stock_recap_manifest
+    from agent_platform.core.registry.agent_registry import (
+        discover_agents,
+        get_default_registry,
+    )
+
+    reg = get_default_registry()
+    if not reg.has(stock_recap_manifest.AGENT_ID):
+        stock_recap_manifest.register(reg)
+    discover_agents(reg)
+    return reg
+
+
 def create_app() -> FastAPI:
     from fastapi import Response
     from fastapi.responses import RedirectResponse
 
     app = FastAPI(
-        title="Stock Daily Recap API",
-        description="企业级 A 股日终复盘智能体 API（含 NDJSON 流式 /v1/recap/stream）",
-        version="1.0.0",
+        title="Agent Platform API",
+        description=(
+            "多 Agent 平台统一 HTTP 入口。每个 Agent 在 manifest 中声明 "
+            "``http_router_factories``，由本工厂迭代 ``AgentRegistry`` 自动挂载。"
+        ),
+        version="2.0.0",
         lifespan=_app_lifespan,
     )
     install_cors(app)
+
+    # ── 平台级公共路由（与具体 Agent 无关） ─────────────────────────────
     app.include_router(ops_router)
-    app.include_router(recap_router)
-    app.include_router(feedback_router)
     app.include_router(jobs_router)
+
+    # ── Agent 自带路由（W6: 按 AgentRegistry 自动装配） ─────────────────
+    # 每个 factory 可以返回单个 APIRouter，也可以返回 list[APIRouter]；都按顺序挂载。
+    registry = _load_registry()
+    for defn in registry.list():
+        for factory in defn.http_router_factories:
+            try:
+                produced = factory()
+            except Exception:
+                import logging
+
+                logging.getLogger("agent_platform.interfaces.api.app").exception(
+                    "agent http router factory failed: agent=%s", defn.id
+                )
+                continue
+            routers = produced if isinstance(produced, list) else [produced]
+            for router in routers:
+                app.include_router(router)
 
     @app.get("/", include_in_schema=False)
     async def root():

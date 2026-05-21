@@ -15,6 +15,24 @@ from typing import Any, Callable, Dict, List, Optional, Type
 from pydantic import BaseModel
 
 
+@dataclass(frozen=True)
+class ScheduledJob:
+    """单个调度任务声明（W6）。
+
+    Agent manifest 声明 ``scheduled_jobs=[ScheduledJob(...), ...]``；scheduler 装配器
+    迭代 ``AgentRegistry`` 自动 ``add_job(handler, CronTrigger(**cron_kwargs))``。
+    平台级公共任务（outbox_sweep）保留在 scheduler 自身。
+    """
+
+    id: str
+    description: str
+    cron_kwargs: Dict[str, Any]  # 直接喂给 ``apscheduler.triggers.cron.CronTrigger``
+    handler: Callable[[Any], None]  # ``(settings) -> None``
+    coalesce: bool = True
+    max_instances: int = 1
+    replace_existing: bool = True
+
+
 class AgentCapability(str, Enum):
     """Agent 能力标签：用于路由 / 文档生成。"""
 
@@ -76,6 +94,16 @@ class AgentDefinition:
     cli_help: Optional[str] = None
     http_path_prefix: Optional[str] = None
 
+    # ── W6: 各装配层钩子（全部 Optional，未填即不挂载） ────────────────────
+    # CLI subcommand：(subparser: ArgumentParser) -> None
+    cli_subparser_factory: Optional[Callable[[Any], None]] = None
+    # CLI subcommand 执行体：(args, settings, subparser) -> int
+    cli_run_handler: Optional[Callable[..., int]] = None
+    # HTTP FastAPI 路由（lazy 工厂；启动时调用）
+    http_router_factories: List[Callable[[], Any]] = field(default_factory=list)
+    # 调度任务声明
+    scheduled_jobs: List[ScheduledJob] = field(default_factory=list)
+
 
 __all__ = [
     "AgentCapability",
@@ -83,4 +111,5 @@ __all__ = [
     "AgentRequestEnvelope",
     "AgentResponseEnvelope",
     "PipelineFactory",
+    "ScheduledJob",
 ]

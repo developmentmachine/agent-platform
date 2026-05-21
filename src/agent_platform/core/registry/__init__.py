@@ -15,6 +15,7 @@ from agent_platform.core.registry.agent_definition import (
     AgentRequestEnvelope,
     AgentResponseEnvelope,
     PipelineFactory,
+    ScheduledJob,
 )
 from agent_platform.core.registry.agent_registry import (
     AgentRegistry,
@@ -28,6 +29,7 @@ __all__ = [
     "AgentRequestEnvelope",
     "AgentResponseEnvelope",
     "PipelineFactory",
+    "ScheduledJob",
     "AgentRegistry",
     "discover_agents",
     "get_default_registry",
