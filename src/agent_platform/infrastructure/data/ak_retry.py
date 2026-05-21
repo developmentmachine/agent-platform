@@ -1,49 +1,30 @@
-"""AkShare / 东财 HTTP 偶发断连时的有限次重试。"""
-from __future__ import annotations
+"""shim → ``agent_platform.agents.stock_recap.data.ak_retry`` (W3)
 
-import logging
-from typing import Callable, TypeVar
-
-from tenacity import retry, stop_after_attempt, wait_exponential
-from tenacity.retry import retry_if_exception
-
-logger = logging.getLogger("agent_platform.data.ak_retry")
-
-T = TypeVar("T")
+Mirror 全部顶层属性到 shim 命名空间，并将 shim 上的 ``setattr`` 同步到真实模块，
+以兼容旧的 ``monkeypatch.setattr(shim_module, name, val)`` 行为。W7 删除。
+"""
+import importlib as _il
+import sys as _sys
+from types import ModuleType as _MT
 
 
-def _transient(exc: BaseException) -> bool:
-    s = f"{type(exc).__name__}:{exc}".lower()
-    keys = (
-        "remote",
-        "connection",
-        "timeout",
-        "reset",
-        "refused",
-        "broken",
-        "disconnected",
-        "temporarily",
-        "502",
-        "503",
-        "504",
-    )
-    return any(k in s for k in keys)
+_new_mod = _il.import_module("agent_platform.agents.stock_recap.data.ak_retry")
 
 
-def ak_call(fn: Callable[[], T], *, label: str = "") -> T:
-    """对无参工厂函数执行带抖动的重试（成功即返回，最后一次异常向上抛）。"""
+def _make_shim_class(target):
+    class _ShimModule(_MT):
+        __target__ = target
 
-    @retry(
-        stop=stop_after_attempt(5),
-        wait=wait_exponential(multiplier=0.35, min=0.5, max=10),
-        retry=retry_if_exception(_transient),
-        reraise=True,
-    )
-    def _run() -> T:
-        return fn()
+        def __setattr__(self, name, value):  # type: ignore[override]
+            _MT.__setattr__(self, name, value)
+            if not name.startswith("__"):
+                setattr(target, name, value)
 
-    try:
-        return _run()
-    except Exception as e:
-        logger.warning("ak_call exhausted label=%s err=%s", label, e)
-        raise
+    return _ShimModule
+
+
+_self = _sys.modules[__name__]
+_self.__class__ = _make_shim_class(_new_mod)
+for _k, _v in vars(_new_mod).items():
+    if not _k.startswith("__"):
+        _MT.__setattr__(_self, _k, _v)

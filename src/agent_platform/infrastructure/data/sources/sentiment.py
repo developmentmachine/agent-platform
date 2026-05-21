@@ -1,91 +1,30 @@
-"""情绪数据源（成交额/涨跌停）：SinaOverviewSource → AkShareSentimentSource。"""
-from __future__ import annotations
+"""shim → ``agent_platform.agents.stock_recap.data.sources.sentiment`` (W3)
 
-import math
-from typing import Any, Dict
-
-import httpx
-
-from agent_platform.infrastructure.data.sources import DataFetcher, DataSource
-
-
-def _safe_float(v: Any, default: float = 0.0) -> float:
-    try:
-        return float(v)
-    except Exception:
-        return default
+Mirror 全部顶层属性到 shim 命名空间，并将 shim 上的 ``setattr`` 同步到真实模块，
+以兼容旧的 ``monkeypatch.setattr(shim_module, name, val)`` 行为。W7 删除。
+"""
+import importlib as _il
+import sys as _sys
+from types import ModuleType as _MT
 
 
-class SinaOverviewSource:
-    """新浪财经 hq.sinajs.cn — 从上证+深证成交额估算两市总量。"""
-
-    name = "sina"
-
-    def fetch(self) -> Dict[str, Any]:
-        url = "https://hq.sinajs.cn/list=s_sh000001,s_sz399001"
-        with httpx.Client(timeout=10) as client:
-            r = client.get(url, headers={
-                "Referer": "https://finance.sina.com.cn",
-                "User-Agent": "Mozilla/5.0",
-            })
-            r.raise_for_status()
-            total = 0.0
-            for line in r.text.splitlines():
-                parts = line.split('"')[1].split(",") if '"' in line else []
-                if len(parts) >= 6:
-                    try:
-                        total += float(parts[5])  # 万元
-                    except Exception:
-                        pass
-            if total > 0:
-                return {"两市成交额(亿)": round(total / 10000, 1)}
-        return {}
+_new_mod = _il.import_module("agent_platform.agents.stock_recap.data.sources.sentiment")
 
 
-class AkShareSentimentSource:
-    """AkShare 涨跌停 + 全市场概览（可能因 urllib3/Python 3.14 兼容性失败）。"""
+def _make_shim_class(target):
+    class _ShimModule(_MT):
+        __target__ = target
 
-    name = "akshare"
+        def __setattr__(self, name, value):  # type: ignore[override]
+            _MT.__setattr__(self, name, value)
+            if not name.startswith("__"):
+                setattr(target, name, value)
 
-    def __init__(self, ak: Any, date_short: str) -> None:
-        self._ak = ak
-        self._date_short = date_short
-
-    def fetch(self) -> Dict[str, Any]:
-        result: Dict[str, Any] = {}
-        ak = self._ak
-        date_short = self._date_short
-
-        try:
-            df = ak.stock_zt_pool_em(date=date_short)
-            result["涨停家数"] = int(len(df)) if df is not None else 0
-        except Exception:
-            pass
-
-        try:
-            df = ak.stock_zt_pool_dtgc_em(date=date_short)
-            result["跌停家数"] = int(len(df)) if df is not None else 0
-        except Exception:
-            pass
-
-        try:
-            df = ak.stock_zh_a_spot_em()
-            if df is not None and not df.empty:
-                if "成交额" in df.columns:
-                    result["两市成交额(亿)"] = float(df["成交额"].sum() / 1e8)
-                if "涨跌幅" in df.columns:
-                    s = df["涨跌幅"]
-                    result["上涨家数"] = int((s > 0).sum())
-                    result["下跌家数"] = int((s < 0).sum())
-                    result["平盘家数"] = int((s == 0).sum())
-        except Exception:
-            pass
-
-        return result
+    return _ShimModule
 
 
-def make_sentiment_fetcher(ak: Any, date_short: str) -> DataFetcher:
-    return DataFetcher(
-        [SinaOverviewSource(), AkShareSentimentSource(ak, date_short)],
-        label="sentiment",
-    )
+_self = _sys.modules[__name__]
+_self.__class__ = _make_shim_class(_new_mod)
+for _k, _v in vars(_new_mod).items():
+    if not _k.startswith("__"):
+        _MT.__setattr__(_self, _k, _v)

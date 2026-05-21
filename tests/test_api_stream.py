@@ -69,7 +69,7 @@ def test_recap_stream_error_event_on_phase_failure(
         raise RuntimeError("stream_phase_boom")
 
     monkeypatch.setattr(
-        "agent_platform.application.orchestration.pipeline.collect_snapshot",
+        "agent_platform.agents.stock_recap.legacy_pipeline.collect_snapshot",
         boom,
     )
     lines: list[str] = []

@@ -12,8 +12,8 @@
 """
 from __future__ import annotations
 
-from agent_platform.infrastructure.data.collector import collect_snapshot
-from agent_platform.infrastructure.data.features import build_features
+from agent_platform.agents.stock_recap.data.collector import collect_snapshot
+from agent_platform.agents.stock_recap.data.features import build_features
 from agent_platform.infrastructure.llm.prompts import build_messages
 
 from tests.golden._compare import assert_matches_golden_json

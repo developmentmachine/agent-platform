@@ -1,40 +1,30 @@
-"""Prompt 进化触发的副作用封装。
+"""shim → ``agent_platform.agents.stock_recap.effects.evolution`` (W3)
 
-把 ``check_and_run_evolution`` 的「异常安全调用」包一层，专供
-``BackgroundTasks`` / 流式响应后的延后执行。主管线里的 evolution 仍通过
-``application/memory/manager.check_and_run_evolution`` 直接调用。
+Mirror 全部顶层属性到 shim 命名空间，并将 shim 上的 ``setattr`` 同步到真实模块，
+以兼容旧的 ``monkeypatch.setattr(shim_module, name, val)`` 行为。W7 删除。
 """
-from __future__ import annotations
-
-import json
-import logging
-from typing import Any, Optional
-
-logger = logging.getLogger("agent_platform.side_effects.evolution")
+import importlib as _il
+import sys as _sys
+from types import ModuleType as _MT
 
 
-def _stable_json(obj: Any) -> str:
-    return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+_new_mod = _il.import_module("agent_platform.agents.stock_recap.effects.evolution")
 
 
-def run_deferred_evolution(
-    db_path: str,
-    settings: Any,
-    *,
-    trigger_run_id: Optional[str],
-    force: bool = False,
-) -> None:
-    """安全触发进化检查；失败只写 warning，不向上抛。"""
-    from agent_platform.application.memory.manager import check_and_run_evolution
+def _make_shim_class(target):
+    class _ShimModule(_MT):
+        __target__ = target
 
-    try:
-        check_and_run_evolution(
-            db_path,
-            settings=settings,
-            trigger_run_id=trigger_run_id,
-            force=force,
-        )
-    except Exception as e:
-        logger.warning(
-            _stable_json({"event": "deferred_evolution_failed", "error": str(e)})
-        )
+        def __setattr__(self, name, value):  # type: ignore[override]
+            _MT.__setattr__(self, name, value)
+            if not name.startswith("__"):
+                setattr(target, name, value)
+
+    return _ShimModule
+
+
+_self = _sys.modules[__name__]
+_self.__class__ = _make_shim_class(_new_mod)
+for _k, _v in vars(_new_mod).items():
+    if not _k.startswith("__"):
+        _MT.__setattr__(_self, _k, _v)

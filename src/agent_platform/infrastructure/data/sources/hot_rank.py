@@ -1,48 +1,30 @@
-"""市场热度榜（个股维度），用于北向口径失效时的盘面佐证。"""
-from __future__ import annotations
+"""shim → ``agent_platform.agents.stock_recap.data.sources.hot_rank`` (W3)
 
-import logging
-from typing import Any, Dict, List
-
-from agent_platform.infrastructure.data.sources import DataFetcher
-
-logger = logging.getLogger("agent_platform.sources.hot_rank")
-
-
-class AkShareHotRankSource:
-    """AkShare stock_hot_rank_em — 当日热度排名前列个股（名称+涨跌幅）。"""
-
-    name = "akshare"
-
-    def __init__(self, ak: Any, top_n: int = 12) -> None:
-        self._ak = ak
-        self._top_n = top_n
-
-    def fetch(self) -> Dict[str, Any]:
-        try:
-            df = self._ak.stock_hot_rank_em()
-        except Exception as e:
-            logger.warning("stock_hot_rank_em failed: %s", e)
-            return {}
-        if df is None or df.empty:
-            return {}
-        name_c = "股票名称" if "股票名称" in df.columns else None
-        pct_c = "涨跌幅" if "涨跌幅" in df.columns else None
-        code_c = "代码" if "代码" in df.columns else None
-        if not name_c or not pct_c:
-            return {}
-        n = min(self._top_n, len(df))
-        rows: List[Dict[str, Any]] = []
-        for _, row in df.head(n).iterrows():
-            item: Dict[str, Any] = {
-                "股票名称": str(row[name_c]).strip(),
-                "涨跌幅": float(row[pct_c]),
-            }
-            if code_c:
-                item["代码"] = str(row[code_c]).strip()
-            rows.append(item)
-        return {"热度榜前列": rows, "数据来源": "akshare:stock_hot_rank_em"}
+Mirror 全部顶层属性到 shim 命名空间，并将 shim 上的 ``setattr`` 同步到真实模块，
+以兼容旧的 ``monkeypatch.setattr(shim_module, name, val)`` 行为。W7 删除。
+"""
+import importlib as _il
+import sys as _sys
+from types import ModuleType as _MT
 
 
-def make_hot_rank_fetcher(ak: Any, top_n: int = 12) -> DataFetcher:
-    return DataFetcher([AkShareHotRankSource(ak, top_n=top_n)], label="hot_rank")
+_new_mod = _il.import_module("agent_platform.agents.stock_recap.data.sources.hot_rank")
+
+
+def _make_shim_class(target):
+    class _ShimModule(_MT):
+        __target__ = target
+
+        def __setattr__(self, name, value):  # type: ignore[override]
+            _MT.__setattr__(self, name, value)
+            if not name.startswith("__"):
+                setattr(target, name, value)
+
+    return _ShimModule
+
+
+_self = _sys.modules[__name__]
+_self.__class__ = _make_shim_class(_new_mod)
+for _k, _v in vars(_new_mod).items():
+    if not _k.startswith("__"):
+        _MT.__setattr__(_self, _k, _v)

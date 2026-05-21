@@ -9,7 +9,7 @@ W3 物理迁移后，这里改为真正的 ``@dataclass class RecapRunState(RunS
 """
 from __future__ import annotations
 
-from agent_platform.application.orchestration.context import RecapAgentRunState
+from agent_platform.agents.stock_recap.recap_state import RecapAgentRunState
 
 # 类型别名：让上层代码可以写 ``Phase[RecapRunState]``，便于 W3 后迁移到独立类。
 RecapRunState = RecapAgentRunState

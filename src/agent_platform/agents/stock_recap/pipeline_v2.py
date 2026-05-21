@@ -20,7 +20,7 @@ from typing import Any, Iterator, List
 
 from agent_platform.agents.stock_recap.phases import RecapPhase, build_default_phases
 from agent_platform.agents.stock_recap.state import RecapRunState
-from agent_platform.application.orchestration.pipeline import (
+from agent_platform.agents.stock_recap.legacy_pipeline import (
     _PHASE_ORDER,
     _build_generate_response,
     _check_budget_between_phases,

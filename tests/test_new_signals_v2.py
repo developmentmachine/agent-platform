@@ -7,8 +7,8 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-from agent_platform.infrastructure.data.sources.liquidity import fetch_liquidity
-from agent_platform.infrastructure.data.sources.sector_leaders import (
+from agent_platform.agents.stock_recap.data.sources.liquidity import fetch_liquidity
+from agent_platform.agents.stock_recap.data.sources.sector_leaders import (
     _top_strong_industry_names,
     fetch_industry_5d_strength,
     fetch_sector_leaders,

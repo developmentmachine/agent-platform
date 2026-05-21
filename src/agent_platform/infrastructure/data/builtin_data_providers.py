@@ -1,59 +1,30 @@
-"""装配内置行情 Provider：mock / live / akshare。"""
-from __future__ import annotations
+"""shim → ``agent_platform.agents.stock_recap.data.builtin_data_providers`` (W3)
 
-from agent_platform.domain.data_providers import DataProviderRegistry, DataProviderSpec
-from agent_platform.infrastructure.data.providers.akshare import collect_akshare
-from agent_platform.infrastructure.data.providers.live import collect_live
-from agent_platform.infrastructure.data.providers.mock import collect_mock
-
-
-def build_default_data_provider_registry() -> DataProviderRegistry:
-    reg = DataProviderRegistry()
-
-    reg.register(
-        DataProviderSpec(
-            name="mock",
-            collect=lambda d, asof, _skip: collect_mock(d, asof),
-            display_name="确定性 Mock（按日期 seed）",
-        )
-    )
-
-    def _collect_live(d: str, asof: str, _skip: bool):
-        try:
-            import akshare as ak  # type: ignore
-        except Exception as e:
-            raise RuntimeError(
-                "AkShare 未能导入。请确认已安装（uv sync），或切换 --provider mock"
-            ) from e
-        date_short = d.replace("-", "")
-        return collect_live(ak, d, date_short, asof)
-
-    reg.register(
-        DataProviderSpec(
-            name="live",
-            collect=_collect_live,
-            display_name="Live（东财 push2 + AkShare 补充）",
-        )
-    )
-
-    def _collect_akshare(d: str, asof: str, _skip: bool):
-        try:
-            import akshare as ak  # type: ignore
-        except Exception as e:
-            raise RuntimeError(
-                "AkShare 未能导入。请确认已安装（uv sync），或切换 --provider mock"
-            ) from e
-        date_short = d.replace("-", "")
-        return collect_akshare(ak, d, date_short, asof)
-
-    reg.register(
-        DataProviderSpec(
-            name="akshare",
-            collect=_collect_akshare,
-            display_name="全量 AkShare",
-        )
-    )
-    return reg
+Mirror 全部顶层属性到 shim 命名空间，并将 shim 上的 ``setattr`` 同步到真实模块，
+以兼容旧的 ``monkeypatch.setattr(shim_module, name, val)`` 行为。W7 删除。
+"""
+import importlib as _il
+import sys as _sys
+from types import ModuleType as _MT
 
 
-__all__ = ["build_default_data_provider_registry"]
+_new_mod = _il.import_module("agent_platform.agents.stock_recap.data.builtin_data_providers")
+
+
+def _make_shim_class(target):
+    class _ShimModule(_MT):
+        __target__ = target
+
+        def __setattr__(self, name, value):  # type: ignore[override]
+            _MT.__setattr__(self, name, value)
+            if not name.startswith("__"):
+                setattr(target, name, value)
+
+    return _ShimModule
+
+
+_self = _sys.modules[__name__]
+_self.__class__ = _make_shim_class(_new_mod)
+for _k, _v in vars(_new_mod).items():
+    if not _k.startswith("__"):
+        _MT.__setattr__(_self, _k, _v)

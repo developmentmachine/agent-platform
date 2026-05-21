@@ -16,7 +16,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, Iterator, List
 
-from agent_platform.application.recap import generate_once, iter_generate_ndjson
+from agent_platform.agents.stock_recap.use_case import generate_once, iter_generate_ndjson
 from agent_platform.core.registry.agent_definition import (
     AgentCapability,
     AgentDefinition,
@@ -138,7 +138,7 @@ def _write_output_files(
 
 def _scheduled_handler(mode: str, settings: Any) -> None:
     """统一的 cron handler — daily_recap / strategy 都走这条。"""
-    from agent_platform.application.recap import generate_once
+    from agent_platform.agents.stock_recap.use_case import generate_once
     from agent_platform.infrastructure.persistence.db import init_db
 
     if not _is_trading_today():
@@ -171,7 +171,7 @@ def _scheduled_handler(mode: str, settings: Any) -> None:
 
 
 def _backtest_handler(settings: Any) -> None:
-    from agent_platform.application.recap import _try_run_backtest
+    from agent_platform.agents.stock_recap.use_case import _try_run_backtest
 
     if not _is_trading_today():
         return

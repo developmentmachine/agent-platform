@@ -1,92 +1,30 @@
-"""市场数据采集层 — 统一入口，经 ``DataProviderRegistry`` 路由到具体实现。
+"""shim → ``agent_platform.agents.stock_recap.data.collector`` (W3)
 
-内置 id（``build_default_data_provider_registry``）：
-- ``mock``    : 确定性随机数据（seed=日期），用于无网络/自测
-- ``live``    : 关键指数走东方财富 push2，其余 AkShare
-- ``akshare`` : 全量 AkShare（``collect_akshare``）
-
-扩展：见 ``domain.data_providers`` 模块文档；运行时 ``register_data_provider`` 登记新 id。
+Mirror 全部顶层属性到 shim 命名空间，并将 shim 上的 ``setattr`` 同步到真实模块，
+以兼容旧的 ``monkeypatch.setattr(shim_module, name, val)`` 行为。W7 删除。
 """
-from __future__ import annotations
-
-import json
-import logging
-from datetime import datetime, timezone
-from typing import Optional
-
-from agent_platform.domain.data_providers import DataProviderRegistry, DataProviderSpec
-from agent_platform.domain.models import MarketSnapshot
-
-logger = logging.getLogger("agent_platform.collector")
-
-_DEFAULT_REGISTRY: Optional[DataProviderRegistry] = None
+import importlib as _il
+import sys as _sys
+from types import ModuleType as _MT
 
 
-def default_data_provider_registry() -> DataProviderRegistry:
-    """进程内单例；测试可 ``reset_default_data_provider_registry()`` 后重建。"""
-    global _DEFAULT_REGISTRY
-    if _DEFAULT_REGISTRY is None:
-        from agent_platform.infrastructure.data.builtin_data_providers import (
-            build_default_data_provider_registry,
-        )
-
-        _DEFAULT_REGISTRY = build_default_data_provider_registry()
-    return _DEFAULT_REGISTRY
+_new_mod = _il.import_module("agent_platform.agents.stock_recap.data.collector")
 
 
-def reset_default_data_provider_registry() -> None:
-    global _DEFAULT_REGISTRY
-    _DEFAULT_REGISTRY = None
+def _make_shim_class(target):
+    class _ShimModule(_MT):
+        __target__ = target
+
+        def __setattr__(self, name, value):  # type: ignore[override]
+            _MT.__setattr__(self, name, value)
+            if not name.startswith("__"):
+                setattr(target, name, value)
+
+    return _ShimModule
 
 
-def register_data_provider(spec: DataProviderSpec) -> None:
-    """向默认注册表追加一个行情源（幂等覆盖同名）。"""
-    default_data_provider_registry().register(spec)
-
-
-def list_data_provider_ids() -> list[str]:
-    return default_data_provider_registry().names()
-
-
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
-def _today_str() -> str:
-    return datetime.now().strftime("%Y-%m-%d")
-
-
-def _stable_json(obj: object) -> str:
-    return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-
-
-def collect_snapshot(
-    provider: str,
-    date: Optional[str],
-    skip_trading_check: bool = False,
-    *,
-    registry: Optional[DataProviderRegistry] = None,
-) -> MarketSnapshot:
-    """采集市场快照：按注册表解析 ``provider`` id，再调用对应 ``collect``。"""
-    from agent_platform.infrastructure.data.calendar import is_trading_day
-
-    d = date or _today_str()
-    asof = _utc_now_iso()
-
-    if not skip_trading_check and not is_trading_day(d):
-        logger.warning(
-            _stable_json(
-                {
-                    "event": "non_trading_day",
-                    "date": d,
-                    "note": "使用 --skip-trading-check 强制生成",
-                }
-            )
-        )
-
-    reg = registry or default_data_provider_registry()
-    try:
-        spec = reg.require(provider)
-    except KeyError as e:
-        raise RuntimeError(str(e)) from e
-    return spec.collect(d, asof, skip_trading_check)
+_self = _sys.modules[__name__]
+_self.__class__ = _make_shim_class(_new_mod)
+for _k, _v in vars(_new_mod).items():
+    if not _k.startswith("__"):
+        _MT.__setattr__(_self, _k, _v)

@@ -1,95 +1,30 @@
-"""指数数据源：TencentIndexSource → EastMoneyIndexSource。"""
-from __future__ import annotations
+"""shim → ``agent_platform.agents.stock_recap.data.sources.indices`` (W3)
 
-from typing import Any, Dict
-
-import httpx
-
-from agent_platform.infrastructure.data.sources import DataFetcher, DataSource
-
-
-def _safe_float(v: Any, default: float = 0.0) -> float:
-    try:
-        return float(v)
-    except Exception:
-        return default
+Mirror 全部顶层属性到 shim 命名空间，并将 shim 上的 ``setattr`` 同步到真实模块，
+以兼容旧的 ``monkeypatch.setattr(shim_module, name, val)`` 行为。W7 删除。
+"""
+import importlib as _il
+import sys as _sys
+from types import ModuleType as _MT
 
 
-class TencentIndexSource:
-    """腾讯财经 qt.gtimg.cn — 稳定，无反爬。"""
-
-    name = "tencent"
-
-    def fetch(self) -> Dict[str, Any]:
-        symbols = {
-            "s_sh000001": "上证指数",
-            "s_sz399001": "深证成指",
-            "s_sz399006": "创业板指",
-            "s_sh000688": "科创50",
-            "s_sh000300": "沪深300",
-            "s_sh000016": "上证50",
-            "s_sh000852": "中证1000",
-            "s_sz399303": "国证2000",
-            "s_sz399296": "创成长",
-        }
-        url = "https://qt.gtimg.cn/q=" + ",".join(symbols.keys())
-        indices: Dict[str, Any] = {}
-        with httpx.Client(timeout=10) as client:
-            r = client.get(url, headers={"User-Agent": "Mozilla/5.0"})
-            r.raise_for_status()
-            for line in r.text.splitlines():
-                for sym, name in symbols.items():
-                    if sym in line and '"' in line:
-                        parts = line.split('"')[1].split("~")
-                        if len(parts) >= 6:
-                            indices[name] = {
-                                "最新价": _safe_float(parts[3]),
-                                "涨跌幅": _safe_float(parts[5]),
-                                "成交额(亿)": round(_safe_float(parts[9]) / 1e4, 2) if len(parts) > 9 else None,
-                            }
-        return indices
+_new_mod = _il.import_module("agent_platform.agents.stock_recap.data.sources.indices")
 
 
-class EastMoneyIndexSource:
-    """东方财富 push2 单股接口 — 备用。"""
+def _make_shim_class(target):
+    class _ShimModule(_MT):
+        __target__ = target
 
-    name = "eastmoney"
+        def __setattr__(self, name, value):  # type: ignore[override]
+            _MT.__setattr__(self, name, value)
+            if not name.startswith("__"):
+                setattr(target, name, value)
 
-    def fetch(self) -> Dict[str, Any]:
-        url = "https://push2.eastmoney.com/api/qt/stock/get"
-        reqs = {
-            "上证指数": "1.000001",
-            "深证成指": "0.399001",
-            "创业板指": "0.399006",
-            "科创50": "1.000688",
-            "沪深300": "1.000300",
-            "上证50": "1.000016",
-            "中证1000": "1.000852",
-            "国证2000": "0.399303",
-            "创成长": "0.399296",
-        }
-        indices: Dict[str, Any] = {}
-        with httpx.Client(timeout=10) as client:
-            for name, secid in reqs.items():
-                r = client.get(url,
-                               params={"secid": secid, "fields": "f43,f170,f47,f48,f58"},
-                               headers={"User-Agent": "Mozilla/5.0"})
-                r.raise_for_status()
-                data = r.json().get("data") or {}
-                price = (data.get("f43") or 0) / 100
-                pct = (data.get("f170") or 0) / 100
-                amount = data.get("f48")
-                if price > 0:
-                    indices[name] = {
-                        "最新价": float(price),
-                        "涨跌幅": float(pct),
-                        "成交额(亿)": float(amount) / 1e8 if isinstance(amount, (int, float)) and amount > 0 else None,
-                    }
-        return indices
+    return _ShimModule
 
 
-def make_indices_fetcher() -> DataFetcher:
-    return DataFetcher(
-        [TencentIndexSource(), EastMoneyIndexSource()],
-        label="indices",
-    )
+_self = _sys.modules[__name__]
+_self.__class__ = _make_shim_class(_new_mod)
+for _k, _v in vars(_new_mod).items():
+    if not _k.startswith("__"):
+        _MT.__setattr__(_self, _k, _v)

@@ -1,81 +1,30 @@
-"""全市场（大盘）主力资金流 — 东财日级序列，取与复盘日匹配或最近一行。"""
-from __future__ import annotations
+"""shim → ``agent_platform.agents.stock_recap.data.sources.market_fund_flow`` (W3)
 
-import logging
-from datetime import date, datetime
-from typing import Any, Dict
-
-from agent_platform.infrastructure.data.ak_retry import ak_call
-
-logger = logging.getLogger("agent_platform.sources.market_fund_flow")
+Mirror 全部顶层属性到 shim 命名空间，并将 shim 上的 ``setattr`` 同步到真实模块，
+以兼容旧的 ``monkeypatch.setattr(shim_module, name, val)`` 行为。W7 删除。
+"""
+import importlib as _il
+import sys as _sys
+from types import ModuleType as _MT
 
 
-def _parse_row_date(v: Any) -> date | None:
-    if v is None:
-        return None
-    if isinstance(v, date) and not isinstance(v, datetime):
-        return v
-    if isinstance(v, datetime):
-        return v.date()
-    try:
-        return datetime.strptime(str(v)[:10], "%Y-%m-%d").date()
-    except Exception:
-        return None
+_new_mod = _il.import_module("agent_platform.agents.stock_recap.data.sources.market_fund_flow")
 
 
-def fetch_market_main_fund_summary(ak: Any, trade_date: str) -> Dict[str, Any]:
-    """返回写入 `market_sentiment['大盘主力资金流']` 的字典；失败返回 {}。"""
-    try:
-        df = ak_call(lambda: ak.stock_market_fund_flow(), label="market_fund_flow")
-    except Exception as e:
-        logger.warning("stock_market_fund_flow failed: %s", e)
-        return {}
-    if df is None or df.empty or "日期" not in df.columns:
-        return {}
+def _make_shim_class(target):
+    class _ShimModule(_MT):
+        __target__ = target
 
-    target = None
-    try:
-        target = datetime.strptime(trade_date, "%Y-%m-%d").date()
-    except Exception:
-        pass
+        def __setattr__(self, name, value):  # type: ignore[override]
+            _MT.__setattr__(self, name, value)
+            if not name.startswith("__"):
+                setattr(target, name, value)
 
-    row = None
-    if target is not None:
-        for _, r in df.iterrows():
-            rd = _parse_row_date(r.get("日期"))
-            if rd == target:
-                row = r
-                break
-    if row is None:
-        row = df.iloc[-1]
+    return _ShimModule
 
-    def _f(name: str) -> float | None:
-        if name not in row.index:
-            return None
-        try:
-            return float(row[name])
-        except Exception:
-            return None
 
-    main_net = _f("主力净流入-净额")
-    out: Dict[str, Any] = {
-        "数据来源": "akshare:stock_market_fund_flow",
-    }
-    rd = _parse_row_date(row.get("日期"))
-    if rd is not None:
-        out["数据日期"] = rd.isoformat()
-    if main_net is not None:
-        out["主力净流入_亿"] = round(main_net / 1e8, 2)
-    p = _f("主力净流入-净占比")
-    if p is not None:
-        out["主力净流入_净占比_%"] = round(p, 2)
-    for label, col in (
-        ("超大单净流入_亿", "超大单净流入-净额"),
-        ("大单净流入_亿", "大单净流入-净额"),
-        ("中单净流入_亿", "中单净流入-净额"),
-        ("小单净流入_亿", "小单净流入-净额"),
-    ):
-        v = _f(col)
-        if v is not None:
-            out[label] = round(v / 1e8, 2)
-    return out if len(out) > 1 else {}
+_self = _sys.modules[__name__]
+_self.__class__ = _make_shim_class(_new_mod)
+for _k, _v in vars(_new_mod).items():
+    if not _k.startswith("__"):
+        _MT.__setattr__(_self, _k, _v)
