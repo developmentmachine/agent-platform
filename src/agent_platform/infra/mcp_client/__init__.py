@@ -10,6 +10,7 @@
 同一套治理语义；这与现 ``RecapToolRunner`` 中的 policy + audit 一致，只是把
 「本地 function-calling 注册表」替换为 ``McpClientPort``。
 """
+from agent_platform.infra.mcp_client.inproc import InProcessMcpClient
 from agent_platform.infra.mcp_client.stdio import StdioMcpClient
 
-__all__ = ["StdioMcpClient"]
+__all__ = ["InProcessMcpClient", "StdioMcpClient"]

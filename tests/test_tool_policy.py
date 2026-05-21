@@ -13,7 +13,7 @@ from agent_platform.infrastructure.persistence.db import (
     init_db,
     load_recent_tool_invocations,
 )
-from agent_platform.infrastructure.tools import runner as runner_mod
+from agent_platform.core.ports.mcp_tool import McpToolResult
 from agent_platform.infrastructure.tools.runner import RecapToolRunner
 from agent_platform.observability.runtime_context import (
     current_budget,
@@ -29,6 +29,7 @@ from agent_platform.policy.tools import (
     ToolTimeout,
     build_default_registry,
 )
+from agent_platform.runtime import mcp_gateway as gw_mod
 from agent_platform.domain.run_context import RunContext
 
 
@@ -63,9 +64,35 @@ def _settings(monkeypatch: pytest.MonkeyPatch, **overrides) -> Settings:
 
 
 def _patch_execute_tool(monkeypatch: pytest.MonkeyPatch, fn=None) -> None:
+    """W2: 替代旧的 ``runner.execute_tool`` patch；现在 patch gateway._call_sync。
+
+    ``fn(name, arguments, db_path=':memory:') -> str`` 旧签名继续兼容；返回值会被
+    包装成 ``McpToolResult``。``fn`` 可以 ``time.sleep`` 模拟超时；gateway 通过
+    ``policy.timeout_s`` 包 asyncio.wait_for 实现超时（这里直接同步等价：把 fn
+    跑在子线程 + asyncio.wait_for）。
+    """
     if fn is None:
         fn = lambda name, arguments, db_path=":memory:": "ok"
-    monkeypatch.setattr(runner_mod, "execute_tool", fn)
+
+    def _call_sync(self, name, arguments, *, timeout_s=None):
+        import asyncio
+
+        async def _runner():
+            return await asyncio.to_thread(fn, name, arguments, ":memory:")
+
+        try:
+            if timeout_s and timeout_s > 0:
+                content = asyncio.run(asyncio.wait_for(_runner(), timeout=timeout_s))
+            else:
+                content = asyncio.run(_runner())
+        except asyncio.TimeoutError:
+            return McpToolResult(
+                name=name, content=f"timeout after {timeout_s}s",
+                is_error=True, meta={"error_kind": "timeout"},
+            )
+        return McpToolResult(name=name, content=content, is_error=False, meta={})
+
+    monkeypatch.setattr(gw_mod.McpToolGateway, "_call_sync", _call_sync, raising=True)
 
 
 # ─── enabled_tool_names ──────────────────────────────────────────────────────

@@ -1,90 +1,55 @@
-"""工具 schema 注册与统一调度（OpenAI / Ollama function calling）。"""
+"""W2 起，本模块不再持有第二份 schema/handler — 转为 ``tools_server.registry`` 的薄壳。
+
+对外语义不变（为兼容 ``mcp_stdio`` 等调用方）：
+- ``TOOL_SCHEMAS``     从 ``tools_server.registry`` 推导（OpenAI tool-calling 兼容格式）
+- ``ALL_TOOL_NAMES``   同源派生
+- ``execute_tool``     调用 ``InProcessMcpClient`` 同步执行；行为与旧实现一致
+- ``prefetch_for_prompt`` 同上
+
+新代码请直接使用 ``runtime.McpToolGateway``，**不要 import 本模块**。
+"""
 from __future__ import annotations
 
 import logging
 from typing import Any, Dict, Iterable, List, Optional
 
-from agent_platform.infrastructure.tools.handlers.history import run_query_history
-from agent_platform.infrastructure.tools.handlers.market_data import run_query_market_data
-from agent_platform.infrastructure.tools.handlers.web_search import run_web_search
-
 logger = logging.getLogger("agent_platform.infrastructure.tools.registry")
 
-ALL_TOOL_NAMES = ("web_search", "query_market_data", "query_history")
 
-# ─── OpenAI-compatible tool schemas ──────────────────────────────────────────
+def _registry():
+    from agent_platform.tools_server.registry import build_default_registry
 
-TOOL_SCHEMAS: List[Dict[str, Any]] = [
-    {
-        "type": "function",
-        "function": {
-            "name": "web_search",
-            "description": (
-                "搜索互联网获取实时市场信息，包括今日指数涨跌、板块热点、"
-                "北向资金、美股行情、大宗商品、地缘政治等。"
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "搜索关键词，例如：今日上证指数收盘 2024-01-02",
-                    }
-                },
-                "required": ["query"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "query_market_data",
-            "description": "查询 A 股实时/历史行情数据，包括指数、板块涨跌幅、北向资金。",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "data_type": {
-                        "type": "string",
-                        "enum": ["index", "sector", "northbound"],
-                        "description": "index=主要指数, sector=板块涨跌, northbound=北向资金",
-                    },
-                    "date": {
-                        "type": "string",
-                        "description": "查询日期 YYYY-MM-DD，不传则取最新",
-                    },
-                },
-                "required": ["data_type"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "query_history",
-            "description": "查询项目内部历史复盘记录，用于对比今日与近期市场走势。",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "mode": {
-                        "type": "string",
-                        "enum": ["daily", "strategy"],
-                        "description": "daily=日终复盘, strategy=次日策略",
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "返回条数，默认 5",
-                        "default": 5,
-                    },
-                },
-                "required": ["mode"],
-            },
-        },
-    },
-]
+    return build_default_registry()
+
+
+def _client():
+    from agent_platform.infra.mcp_client.inproc import InProcessMcpClient
+
+    return InProcessMcpClient()
+
+
+def _all_tool_names() -> tuple:
+    return tuple(_registry().names())
+
+
+def _all_schemas() -> List[Dict[str, Any]]:
+    return [spec.to_openai_function() for spec in _registry().list()]
+
+
+def __getattr__(name: str):
+    # Lazy attributes — break the import cycle with tools_server.tools.* shims.
+    if name == "ALL_TOOL_NAMES":
+        return _all_tool_names()
+    if name == "TOOL_SCHEMAS":
+        return _all_schemas()
+    raise AttributeError(name)
 
 
 def execute_tool(name: str, arguments: Dict[str, Any], db_path: str = ":memory:") -> str:
-    """根据工具名执行对应 handler，返回字符串结果。"""
+    """根据工具名执行对应 handler，返回字符串结果。
+
+    db_path 参数保留只为旧调用方兼容；``query_history`` handler 自行从环境变量解析。
+    """
     from agent_platform.observability.runtime_context import current_run_context
     from agent_platform.observability.tracing import get_tracer
 
@@ -95,21 +60,13 @@ def execute_tool(name: str, arguments: Dict[str, Any], db_path: str = ":memory:"
     if ctx is not None:
         attrs["recap.request_id"] = ctx.request_id
         attrs["recap.trace_id"] = ctx.trace_id
+
     with tracer.start_as_current_span("llm.tool.execute", attributes=attrs):
-        if name == "web_search":
-            return run_web_search(arguments.get("query", ""))
-        if name == "query_market_data":
-            return run_query_market_data(
-                arguments.get("data_type", "index"),
-                arguments.get("date"),
-            )
-        if name == "query_history":
-            return run_query_history(
-                db_path,
-                arguments.get("mode", "daily"),
-                int(arguments.get("limit", 5)),
-            )
-        return f"未知工具: {name}"
+        cli = _client()
+        result = cli.call_sync(name, arguments)
+    if result.is_error:
+        return result.content or f"未知工具: {name}"
+    return result.content or ""
 
 
 def prefetch_for_prompt(
@@ -117,23 +74,31 @@ def prefetch_for_prompt(
     db_path: str = ":memory:",
     enabled_tools: Optional[Iterable[str]] = None,
 ) -> str:
-    """按 ``enabled_tools`` 预执行工具并拼接上下文（cursor-cli / gemini-cli 注入）。
-
-    ``enabled_tools`` 为 ``None`` 时等价于所有工具开启；传空集合则返回空字符串。
-    使用方应在 ``RecapToolRunner.prefetch_for_prompt`` 中按 ``Settings.tools_*``
-    过滤后再传入，以保证与 function-calling 路径的策略一致。
-    """
-    allowed = set(ALL_TOOL_NAMES) if enabled_tools is None else set(enabled_tools)
+    """按 ``enabled_tools`` 预执行工具并拼接上下文。"""
+    allowed = set(_all_tool_names()) if enabled_tools is None else set(enabled_tools)
+    cli = _client()
     parts: List[str] = []
+
     if "web_search" in allowed:
-        parts.append(
-            f"【联网搜索结果】\n{run_web_search(f'A股行情 {date} 上证指数 北向资金 板块')}"
+        r = cli.call_sync(
+            "web_search",
+            {"query": f"A股行情 {date} 上证指数 北向资金 板块"},
         )
+        parts.append(f"【联网搜索结果】\n{r.content}")
     if "query_market_data" in allowed:
         for dt in ("index", "sector", "northbound"):
-            parts.append(f"【{dt} 行情数据】\n{run_query_market_data(dt, date)}")
+            r = cli.call_sync("query_market_data", {"data_type": dt, "date": date})
+            parts.append(f"【{dt} 行情数据】\n{r.content}")
     if "query_history" in allowed:
-        parts.append(
-            f"【近期历史复盘】\n{run_query_history(db_path, 'daily', limit=3)}"
-        )
+        r = cli.call_sync("query_history", {"mode": "daily", "limit": 3})
+        parts.append(f"【近期历史复盘】\n{r.content}")
+
     return "\n\n".join(parts)
+
+
+__all__ = [
+    "ALL_TOOL_NAMES",
+    "TOOL_SCHEMAS",
+    "execute_tool",
+    "prefetch_for_prompt",
+]

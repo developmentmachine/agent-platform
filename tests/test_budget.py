@@ -97,12 +97,15 @@ def test_wall_ms_exceed_after_sleep_simulated() -> None:
 
 
 def test_tool_runner_increments_via_contextvar(monkeypatch: pytest.MonkeyPatch) -> None:
-    from agent_platform.infrastructure.tools import runner as runner_mod
+    """W2: runner 现在委托 ``McpToolGateway``，patch 点改为 gateway 的 _call_sync。"""
+    from agent_platform.core.ports.mcp_tool import McpToolResult
     from agent_platform.infrastructure.tools.runner import RecapToolRunner
+    from agent_platform.runtime import mcp_gateway as gw_mod
 
-    monkeypatch.setattr(
-        runner_mod, "execute_tool", lambda name, arguments, db_path=":memory:": "ok"
-    )
+    def _fake_call(self, name, arguments, *, timeout_s=None):
+        return McpToolResult(name=name, content="ok", is_error=False, meta={})
+
+    monkeypatch.setattr(gw_mod.McpToolGateway, "_call_sync", _fake_call, raising=True)
 
     s = _settings(monkeypatch, agent_max_tool_calls=2)
     runner = RecapToolRunner(s)
