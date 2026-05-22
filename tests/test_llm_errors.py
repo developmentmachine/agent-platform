@@ -25,7 +25,7 @@ from agent_platform.domain.models import (
 )
 from agent_platform.infrastructure.llm import backends as backends_mod
 from agent_platform.infrastructure.llm.backends import call_llm
-from agent_platform.infrastructure.llm.parse import parse_and_validate
+from agent_platform.agents.stock_recap.llm.parse import parse_and_validate
 
 
 class _CountingProvider:

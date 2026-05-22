@@ -13,7 +13,7 @@ from agent_platform.domain.models import (
     RecapDailySection,
     RecapStrategy,
 )
-from agent_platform.presentation.render.renderers import (
+from agent_platform.agents.stock_recap.render import (
     render_markdown,
     render_markdown_for_wechat_work,
     render_wechat_text,

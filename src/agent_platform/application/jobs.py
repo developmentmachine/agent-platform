@@ -24,7 +24,7 @@ import logging
 import uuid
 from typing import Any, Dict, Optional
 
-from agent_platform.application.recap import generate_once
+from agent_platform.agents.stock_recap.use_case import generate_once
 from agent_platform.config.settings import Settings
 from agent_platform.domain.models import GenerateRequest
 from agent_platform.domain.principal import PrincipalContext, get_principal

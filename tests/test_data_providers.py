@@ -5,7 +5,7 @@ import pytest
 
 from agent_platform.domain.data_providers import DataProviderSpec
 from agent_platform.domain.models import MarketSnapshot
-from agent_platform.infrastructure.data.collector import (
+from agent_platform.agents.stock_recap.data.collector import (
     collect_snapshot,
     default_data_provider_registry,
     list_data_provider_ids,

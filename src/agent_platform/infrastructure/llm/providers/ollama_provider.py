@@ -9,7 +9,7 @@ import httpx
 
 from agent_platform.config.settings import Settings
 from agent_platform.domain.models import LlmError, LlmTokens, LlmTransportError, Mode, Recap
-from agent_platform.infrastructure.llm.parse import _stable_json, parse_and_validate
+from agent_platform.agents.stock_recap.llm.parse import _stable_json, parse_and_validate
 from agent_platform.observability.runtime_context import current_budget
 
 logger = logging.getLogger("agent_platform.infrastructure.llm.providers.ollama")

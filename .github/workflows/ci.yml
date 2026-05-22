@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: uv pip install --system -e ".[dev]"
 
+      - name: Architecture boundaries (import-linter)
+        run: lint-imports
+
       - name: Run tests
         run: pytest tests/ -v --tb=short
 

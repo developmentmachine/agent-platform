@@ -216,14 +216,19 @@ def test_tool_invocation_metric_records_ok_and_denied(tmp_path, monkeypatch):
     settings.tools_web_search = True
     settings.tool_audit_enabled = False  # 测试不依赖审计落库
 
-    # runner 内部通过 ``execute_tool(name, arguments, db_path)`` 真正执行；
-    # 把它桩成成功返回，确保关注点只在 metric。
-    def _fake_execute(name, args, db_path):
-        return json.dumps({"ok": True, "name": name, "args": args}, ensure_ascii=False)
+    # W2: runner 委托 ``McpToolGateway``，patch 点改为 gateway._call_sync。
+    from agent_platform.core.ports.mcp_tool import McpToolResult
+    from agent_platform.runtime import mcp_gateway as gw_mod
 
-    monkeypatch.setattr(
-        "agent_platform.infrastructure.tools.runner.execute_tool", _fake_execute
-    )
+    def _fake_call(self, name, arguments, *, timeout_s=None):
+        return McpToolResult(
+            name=name,
+            content=json.dumps({"ok": True, "name": name, "args": arguments}, ensure_ascii=False),
+            is_error=False,
+            meta={},
+        )
+
+    monkeypatch.setattr(gw_mod.McpToolGateway, "_call_sync", _fake_call, raising=True)
 
     policy_reg = ToolPolicyRegistry()
     policy_reg.register(

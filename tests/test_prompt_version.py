@@ -1,8 +1,8 @@
 """prompt_version 的跨进程事实源 + 本地 TTL 缓存语义。"""
 import pytest
 
-from agent_platform.application.memory import manager as mgr
-from agent_platform.infrastructure.llm.prompts import PROMPT_BASE_VERSION
+from agent_platform.agents.stock_recap.memory import manager as mgr
+from agent_platform.agents.stock_recap.llm.prompts import PROMPT_BASE_VERSION
 from agent_platform.infrastructure.persistence.db import (
     get_active_prompt_version,
     init_db,

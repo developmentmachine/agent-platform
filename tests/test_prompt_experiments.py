@@ -13,7 +13,7 @@ from typing import Counter, Optional
 import pytest
 from fastapi.testclient import TestClient
 
-from agent_platform.application.experiments import select_variant
+from agent_platform.agents.stock_recap.experiments import select_variant
 from agent_platform.config.settings import Settings
 from agent_platform.infrastructure.persistence.db import (
     get_conn,
@@ -234,7 +234,7 @@ def test_pipeline_persists_experiment_id_and_variant(tmp_path, monkeypatch):
         variants=[("only", "v-experiment", 1)],
     )
 
-    from agent_platform.application.recap import generate_once
+    from agent_platform.agents.stock_recap.use_case import generate_once
     from agent_platform.domain.models import GenerateRequest
 
     req = GenerateRequest(
@@ -278,7 +278,7 @@ def test_pipeline_no_experiment_keeps_global_prompt_version(tmp_path, monkeypatc
     settings = _settings_mod.Settings()
     init_db(settings.db_path)
 
-    from agent_platform.application.recap import generate_once
+    from agent_platform.agents.stock_recap.use_case import generate_once
     from agent_platform.domain.models import GenerateRequest
 
     req = GenerateRequest(

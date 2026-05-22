@@ -1,10 +1,43 @@
 # 扩展新 Agent 指导手册
 
+> **本文已更新到 v2 平台化架构。** v1 老路径仍可工作（迁移中），但**新 Agent 必须按 v2 路径添加**。
+> 完整架构见 [`ARCHITECTURE.md`](./ARCHITECTURE.md)。
+
 本文档面向需要在 `agent_platform` 基础上**新增一个业务 Agent** 的开发者。
 
 ---
 
-## 一、理解平台分层
+## 〇、TL;DR（最小新 Agent 5 步）
+
+```
+1) 新建 src/agent_platform/agents/<id>/
+2) 写 domain/ + 实现 runner (或 Pipeline[StateT] + Phase 子类)
+3) 写 manifest.py，导出 register(reg) → reg.register(AgentDefinition(...))
+4) 在 src/agent_platform/runtime/factory.py 的 _register_builtin_agents 加一行
+   （可选：在 pyproject.toml 的 [project.entry-points."agent_platform.agents"] 追加）
+5) 跑 pytest + lint-imports
+```
+
+CLI / HTTP / WeCom / QQ / Scheduler 入口**零改动**，自动发现新 Agent。
+
+---
+
+## 一、理解平台分层（v2）
+
+详见 [`ARCHITECTURE.md`](./ARCHITECTURE.md)。要点：
+
+| 层 | 角色 | 你新增 Agent 时要不要动？ |
+|----|------|---------------------------|
+| `core/` | 平台契约（Ports + Pipeline + Registry + Bus） | **绝不动** |
+| `runtime/` | Composition Root | 仅在 `_register_builtin_agents` 加一行 |
+| `infra/` | 通用技术实现 | 不动（除非引入新 backend） |
+| `tools_server/` | MCP 工具服务 | 仅在加新工具时改 |
+| `agents/<id>/` | **你的全部代码住在这里** | ✅ 新建子目录 |
+| `adapters/` | 入口适配器 | 不动 |
+
+---
+
+## 二、旧文档保留
 
 ```
 src/agent_platform/
@@ -149,9 +182,9 @@ class MyDataSource:
 这里串联数据采集 → 构建 prompt → 调用 LLM → 处理输出。**直接复用平台层的 pipeline 和工具**，不需要重新实现：
 
 ```python
-from agent_platform.application.orchestration.pipeline import run_pipeline
-from agent_platform.application.orchestration.context import RunContext
-from agent_platform.infrastructure.llm.prompts import build_messages
+from agent_platform.agents.stock_recap.legacy_pipeline import run_pipeline
+from agent_platform.agents.stock_recap.recap_state import RunContext
+from agent_platform.agents.stock_recap.llm.prompts import build_messages
 from agent_platform.config.settings import Settings
 
 async def run_my_agent(settings: Settings, mode: str = "my_agent") -> str:

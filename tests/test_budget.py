@@ -16,8 +16,8 @@ from typing import Dict, List, Tuple
 import pytest
 
 from agent_platform.application.orchestration.budget import AgentBudget
-from agent_platform.application.orchestration.context import RecapAgentRunState
-from agent_platform.application.orchestration.pipeline import _check_budget_between_phases
+from agent_platform.agents.stock_recap.recap_state import RecapAgentRunState
+from agent_platform.agents.stock_recap.legacy_pipeline import _check_budget_between_phases
 from agent_platform.config.settings import Settings
 from agent_platform.domain.models import (
     GenerateRequest,
@@ -97,12 +97,15 @@ def test_wall_ms_exceed_after_sleep_simulated() -> None:
 
 
 def test_tool_runner_increments_via_contextvar(monkeypatch: pytest.MonkeyPatch) -> None:
-    from agent_platform.infrastructure.tools import runner as runner_mod
+    """W2: runner 现在委托 ``McpToolGateway``，patch 点改为 gateway 的 _call_sync。"""
+    from agent_platform.core.ports.mcp_tool import McpToolResult
     from agent_platform.infrastructure.tools.runner import RecapToolRunner
+    from agent_platform.runtime import mcp_gateway as gw_mod
 
-    monkeypatch.setattr(
-        runner_mod, "execute_tool", lambda name, arguments, db_path=":memory:": "ok"
-    )
+    def _fake_call(self, name, arguments, *, timeout_s=None):
+        return McpToolResult(name=name, content="ok", is_error=False, meta={})
+
+    monkeypatch.setattr(gw_mod.McpToolGateway, "_call_sync", _fake_call, raising=True)
 
     s = _settings(monkeypatch, agent_max_tool_calls=2)
     runner = RecapToolRunner(s)
@@ -139,7 +142,7 @@ def test_check_budget_between_phases_skips_act_and_critique(
 
 def test_act_phase_handles_budget_exceeded_gracefully(monkeypatch: pytest.MonkeyPatch) -> None:
     """provider 抛 ``LlmBudgetExceeded`` 时 act 节点不应让整个 pipeline 崩。"""
-    from agent_platform.application.orchestration import pipeline as pipeline_mod
+    from agent_platform.agents.stock_recap import legacy_pipeline as pipeline_mod
     from agent_platform.infrastructure.llm import backends as backends_mod
 
     s = _settings(monkeypatch)

@@ -5,7 +5,7 @@
 
 扩展方式（运行时）：
     from agent_platform.domain.data_providers import DataProviderSpec
-    from agent_platform.infrastructure.data.collector import (
+    from agent_platform.agents.stock_recap.data.collector import (
         default_data_provider_registry,
     )
 

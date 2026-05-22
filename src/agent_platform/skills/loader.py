@@ -221,16 +221,17 @@ def _merged_manifest() -> Dict[str, Any]:
 
     base = _base_manifest()
     overlays: List[Tuple[Dict[str, Any], Path]] = []
-    for d in _extra_dirs_from_settings():
-        try:
-            overlays.append((_load_bundle_manifest(d), d))
-        except Exception as e:
-            logger.warning("skip invalid skill extra dir %s: %s", d, e)
+    # Agent entry_point bundles 先于 extra_dirs，便于 RECAP_SKILL_EXTRA_DIRS 在本地覆盖。
     for root in _iter_entry_point_bundle_roots():
         try:
             overlays.append((_load_bundle_manifest(root), root))
         except Exception as e:
             logger.warning("skip invalid entry-point skill bundle %s: %s", root, e)
+    for d in _extra_dirs_from_settings():
+        try:
+            overlays.append((_load_bundle_manifest(d), d))
+        except Exception as e:
+            logger.warning("skip invalid skill extra dir %s: %s", d, e)
 
     merged = _merge_manifests(base, overlays) if overlays else json.loads(json.dumps(base))
     _MERGED_MANIFEST = merged

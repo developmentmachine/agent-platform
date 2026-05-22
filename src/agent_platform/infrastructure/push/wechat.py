@@ -14,7 +14,7 @@ import httpx
 
 from agent_platform.domain.models import Recap
 from agent_platform.infrastructure.push import PushProvider
-from agent_platform.presentation.render.renderers import render_markdown_for_wechat_work, render_wechat_text
+from agent_platform.agents.stock_recap.render import render_markdown_for_wechat_work, render_wechat_text
 
 logger = logging.getLogger("agent_platform.infrastructure.push.wechat")
 
