@@ -11,7 +11,7 @@ W3 起本 loader 兼容**多 bundle 叠加**：
   指向含 ``manifest.json`` 的 bundle 根目录。
 
 合并规则：
-- ``artifacts``：按 key 合并；先底座，后 entry_points；后写覆盖先写。
+- ``artifacts``：先底座，后 Agent entry_points；后写覆盖先写（与 skills 一致）。
 - ``bundle_version``：依然取**平台底座**的版本字符串以保证 prompt_version 稳定。
 """
 from __future__ import annotations

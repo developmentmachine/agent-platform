@@ -85,14 +85,13 @@ _DESCRIPTION = (
 
 
 def _cli_subparser(sub: Any) -> None:
-    """委托给历史 stock_recap_cli.register_subparser（W3 物理迁移后内联此处）。"""
-    from agent_platform.interfaces.agents.stock_recap_cli import register_subparser
+    from agent_platform.agents.stock_recap.cli import register_subparser
 
     register_subparser(sub)
 
 
 def _cli_run(args: Any, settings: Any, parser: Any) -> int:
-    from agent_platform.interfaces.agents.stock_recap_cli import run as _run
+    from agent_platform.agents.stock_recap.cli import run as _run
 
     return _run(args, settings, parser)
 
@@ -101,9 +100,7 @@ def _cli_run(args: Any, settings: Any, parser: Any) -> int:
 
 
 def _http_routers() -> List[Any]:
-    """recap 拥有的 FastAPI 路由（lazy import 避免 FastAPI 在 manifest 加载即引入）。"""
-    from agent_platform.interfaces.api.v1.feedback import router as feedback_router
-    from agent_platform.interfaces.api.v1.recap import router as recap_router
+    from agent_platform.agents.stock_recap.http_routes import feedback_router, recap_router
 
     return [recap_router, feedback_router]
 

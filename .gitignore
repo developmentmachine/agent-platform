@@ -28,3 +28,7 @@ htmlcov/
 
 # OS
 .DS_Store
+
+# stock-recap CLI 默认输出（勿提交）
+recap_*.md
+recap_*_wechat.txt

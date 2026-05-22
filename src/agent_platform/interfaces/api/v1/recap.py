@@ -1,91 +1,30 @@
-"""生成复盘（同步 JSON）+ NDJSON 流式复盘 端点。
+"""shim → ``agent_platform.agents.stock_recap.http_routes.recap`` (W3)
 
-编排：FastAPI 依赖注入 → 输入护栏 → init_db → RunContext →
-``generate_once``/``iter_generate_ndjson``；响应后将进化/回测挂到 BackgroundTasks。
+Mirror 全部顶层属性；shim setattr 同步到真实模块。W7 删除。
 """
-from __future__ import annotations
+import importlib as _il
+import sys as _sys
+from types import ModuleType as _MT
 
-from typing import Iterator, Optional
-
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
-from fastapi.responses import JSONResponse, StreamingResponse
-
-from agent_platform.application.recap import generate_once, iter_generate_ndjson
-from agent_platform.application.side_effects import run_deferred_post_recap
-from agent_platform.config.settings import Settings, get_settings
-from agent_platform.domain.models import GenerateRequest, GenerateResponse
-from agent_platform.domain.run_context import RunContext
-from agent_platform.infrastructure.persistence.db import init_db
-from agent_platform.interfaces.api.deps import require_api_key, require_rate_limit
-from agent_platform.policy.guardrails import GuardrailError, validate_generate_request
-
-router = APIRouter(tags=["recap"])
+_new_mod = _il.import_module("agent_platform.agents.stock_recap.http_routes.recap")
 
 
-@router.post(
-    "/v1/recap",
-    response_model=GenerateResponse,
-    dependencies=[Depends(require_api_key), Depends(require_rate_limit)],
-)
-def api_generate(
-    req: GenerateRequest,
-    background_tasks: BackgroundTasks,
-    settings: Settings = Depends(get_settings),
-    x_session_id: Optional[str] = Header(default=None, alias="X-Session-Id"),
-) -> JSONResponse:
-    try:
-        validate_generate_request(req)
-    except GuardrailError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    init_db(settings.db_path)
-    ctx = RunContext.new(session_id=x_session_id)
-    resp = generate_once(
-        req,
-        settings,
-        ctx=ctx,
-        defer_evolution_backtest=True,
-    )
-    background_tasks.add_task(
-        run_deferred_post_recap,
-        resp.request_id,
-        req.mode,
-        resp.snapshot.date,
-        resp.recap is not None,
-    )
+def _make_shim_class(target):
+    class _ShimModule(_MT):
+        __target__ = target
 
-    status = 200
-    if req.force_llm and resp.recap is None:
-        status = 503
-    return JSONResponse(status_code=status, content=resp.model_dump())
+        def __setattr__(self, name, value):  # type: ignore[override]
+            _MT.__setattr__(self, name, value)
+            if not name.startswith("__"):
+                setattr(target, name, value)
+
+    return _ShimModule
 
 
-@router.post(
-    "/v1/recap/stream",
-    dependencies=[Depends(require_api_key), Depends(require_rate_limit)],
-)
-def api_generate_stream(
-    req: GenerateRequest,
-    settings: Settings = Depends(get_settings),
-    x_session_id: Optional[str] = Header(default=None, alias="X-Session-Id"),
-) -> StreamingResponse:
-    """NDJSON 流：``meta`` → 各 ``phase`` → ``result``；进化与回测在流结束后执行。"""
-    try:
-        validate_generate_request(req)
-    except GuardrailError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    init_db(settings.db_path)
-    ctx = RunContext.new(session_id=x_session_id)
+_self = _sys.modules[__name__]
+_self.__class__ = _make_shim_class(_new_mod)
+for _k, _v in vars(_new_mod).items():
+    if not _k.startswith("__"):
+        _MT.__setattr__(_self, _k, _v)
 
-    def body() -> Iterator[str]:
-        yield from iter_generate_ndjson(
-            req,
-            settings,
-            ctx=ctx,
-            defer_evolution_backtest=True,
-        )
-
-    return StreamingResponse(
-        body(),
-        media_type="application/x-ndjson",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+del _il, _sys, _MT, _self, _k, _v

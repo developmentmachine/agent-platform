@@ -1,57 +1,30 @@
-"""用户反馈：落库 + 条件触发进化循环。"""
-from __future__ import annotations
+"""shim → ``agent_platform.agents.stock_recap.http_routes.feedback`` (W3)
 
-import logging
-from typing import Any, Dict
+Mirror 全部顶层属性；shim setattr 同步到真实模块。W7 删除。
+"""
+import importlib as _il
+import sys as _sys
+from types import ModuleType as _MT
 
-from fastapi import APIRouter, Depends, HTTPException
-
-from agent_platform.application.memory.manager import check_and_run_evolution
-from agent_platform.config.settings import Settings, get_settings
-from agent_platform.domain.models import FeedbackRequest
-from agent_platform.domain.principal import PrincipalContext
-from agent_platform.infrastructure.persistence.db import init_db, insert_feedback
-from agent_platform.interfaces.api.deps import require_api_key, stable_json, utc_now_iso
-from agent_platform.policy.guardrails import GuardrailError, validate_feedback_request
-
-logger = logging.getLogger("agent_platform.interfaces.api.feedback")
-
-router = APIRouter(tags=["recap"])
+_new_mod = _il.import_module("agent_platform.agents.stock_recap.http_routes.feedback")
 
 
-@router.post("/v1/feedback")
-def api_feedback(
-    req: FeedbackRequest,
-    settings: Settings = Depends(get_settings),
-    principal: PrincipalContext = Depends(require_api_key),
-) -> Dict[str, Any]:
-    try:
-        validate_feedback_request(req)
-    except GuardrailError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    init_db(settings.db_path)
-    insert_feedback(
-        settings.db_path,
-        request_id=req.request_id,
-        created_at=utc_now_iso(),
-        rating=int(req.rating),
-        tags=req.tags,
-        comment=req.comment,
-        tenant_id=principal.tenant_id,
-    )
+def _make_shim_class(target):
+    class _ShimModule(_MT):
+        __target__ = target
 
-    force = req.rating <= 2
-    if force:
-        logger.info(stable_json({"event": "low_rating_evolution", "rating": req.rating}))
-    evolved = check_and_run_evolution(
-        settings.db_path,
-        settings=settings,
-        trigger_run_id=req.request_id,
-        force=force,
-    )
+        def __setattr__(self, name, value):  # type: ignore[override]
+            _MT.__setattr__(self, name, value)
+            if not name.startswith("__"):
+                setattr(target, name, value)
 
-    return {
-        "ok": True,
-        "evolved": evolved is not None,
-        "new_prompt_version": evolved,
-    }
+    return _ShimModule
+
+
+_self = _sys.modules[__name__]
+_self.__class__ = _make_shim_class(_new_mod)
+for _k, _v in vars(_new_mod).items():
+    if not _k.startswith("__"):
+        _MT.__setattr__(_self, _k, _v)
+
+del _il, _sys, _MT, _self, _k, _v

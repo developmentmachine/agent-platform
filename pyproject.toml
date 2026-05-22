@@ -52,6 +52,12 @@ agent_platform-tools-mcp = "agent_platform.tools_server:run_server"
 [project.entry-points."agent_platform.agents"]
 stock-recap = "agent_platform.agents.stock_recap.manifest:register"
 
+[project.entry-points."agent_platform.prompts"]
+stock-recap = "agent_platform.agents.stock_recap.prompts:bundle_root"
+
+[project.entry-points."agent_platform.skills"]
+stock-recap = "agent_platform.agents.stock_recap.skills:bundle_root"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
