@@ -213,6 +213,20 @@ def test_build_botpy_client_dispatches_to_connector(monkeypatch: pytest.MonkeyPa
 # ─── connector.start() 早退路径：未配置时不应 crash ──────────────────────────
 
 
+def test_load_qq_options_accepts_client_secret() -> None:
+    from agent_platform.adapters.qq.connector import load_qq_options_from_env
+
+    opts = load_qq_options_from_env(
+        {
+            "QQ_BOT_APP_ID": "1904044228",
+            "QQ_BOT_CLIENT_SECRET": "secret-value",
+            "QQ_BOT_ENABLED": "true",
+        }
+    )
+    assert opts.app_id == "1904044228"
+    assert opts.app_secret == "secret-value"
+
+
 def test_qq_connector_start_noop_when_not_configured(monkeypatch: pytest.MonkeyPatch) -> None:
     from agent_platform.adapters.qq.connector import (
         QqBotConnector,

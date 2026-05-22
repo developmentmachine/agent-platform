@@ -1,21 +1,22 @@
 """botpy.Client 适配 — 把官方 SDK 的事件桥接到 ``QqBotConnector`` (W5)。
 
-事件覆盖（与 ares-pkx 一致的 surface）：
+事件覆盖（与 ares-agent-pkx 一致的 surface）：
 - ``on_at_message_create``        频道 @机器人（公域消息）
 - ``on_group_at_message_create``  QQ 群 @机器人
 - ``on_c2c_message_create``       QQ 私聊
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Dict
 
 logger = logging.getLogger("agent_platform.adapters.qq.botpy_client")
 
 
-def _frame_from_group_message(message: Any) -> Dict[str, Any]:
+def _frame_from_group_message(message: Any, *, group_at: bool = False) -> Dict[str, Any]:
     """把 botpy.message.GroupMessage 序列化为 ``handle_group_message`` 期望的 dict。"""
-    return {
+    frame: Dict[str, Any] = {
         "id": getattr(message, "id", None),
         "msg_id": getattr(message, "id", None),
         "content": getattr(message, "content", "") or "",
@@ -23,6 +24,9 @@ def _frame_from_group_message(message: Any) -> Dict[str, Any]:
         "author": {"id": getattr(getattr(message, "author", None), "id", None)},
         "_sdk_message": message,
     }
+    if group_at:
+        frame["_group_at"] = True
+    return frame
 
 
 def _frame_from_c2c_message(message: Any) -> Dict[str, Any]:
@@ -30,14 +34,16 @@ def _frame_from_c2c_message(message: Any) -> Dict[str, Any]:
         "id": getattr(message, "id", None),
         "msg_id": getattr(message, "id", None),
         "content": getattr(message, "content", "") or "",
-        "author": {"id": getattr(getattr(message, "author", None), "user_openid", None)
-                          or getattr(getattr(message, "author", None), "id", None)},
+        "author": {
+            "id": getattr(getattr(message, "author", None), "user_openid", None)
+            or getattr(getattr(message, "author", None), "id", None)
+        },
         "_sdk_message": message,
     }
 
 
 def _frame_from_at_message(message: Any) -> Dict[str, Any]:
-    return {
+    frame = {
         "id": getattr(message, "id", None),
         "msg_id": getattr(message, "id", None),
         "content": getattr(message, "content", "") or "",
@@ -45,28 +51,37 @@ def _frame_from_at_message(message: Any) -> Dict[str, Any]:
         "guild_id": getattr(message, "guild_id", None),
         "author": {"id": getattr(getattr(message, "author", None), "id", None)},
         "_sdk_message": message,
+        "_group_at": True,
     }
+    return frame
 
 
 def build_botpy_client(connector: Any):
     """构造 botpy.Client 子类，事件转发至 connector。
 
-    必须 lazy 导入 botpy（重 SDK；测试常需 monkeypatch）。
+    复盘在 ``run_in_executor`` 中执行，避免阻塞 asyncio 事件循环。
     """
     import botpy
 
     intents = botpy.Intents(
-        public_messages=True,        # group + c2c
-        public_guild_messages=True,  # @bot in channels
+        public_messages=True,
+        public_guild_messages=True,
     )
 
     class _PlatformBotpyClient(botpy.Client):  # type: ignore[misc]
         async def on_ready(self):
-            logger.info("qq botpy ready: bot=%s", getattr(self.robot, "name", "?"))
+            robot = getattr(self, "robot", None)
+            name = getattr(robot, "name", None) if robot else None
+            logger.info("qq botpy ready: bot=%s", name or "?")
+
+        async def _run_handler(self, handler_name: str, frame: Dict[str, Any]) -> str | None:
+            loop = asyncio.get_running_loop()
+            handler = getattr(connector, handler_name)
+            return await loop.run_in_executor(None, lambda: handler(frame))
 
         async def on_group_at_message_create(self, message):
-            frame = _frame_from_group_message(message)
-            reply = connector.handle_group_message(frame)
+            frame = _frame_from_group_message(message, group_at=True)
+            reply = await self._run_handler("handle_group_message", frame)
             if reply:
                 try:
                     await message.reply(content=reply)
@@ -75,7 +90,7 @@ def build_botpy_client(connector: Any):
 
         async def on_c2c_message_create(self, message):
             frame = _frame_from_c2c_message(message)
-            reply = connector.handle_c2c_message(frame)
+            reply = await self._run_handler("handle_c2c_message", frame)
             if reply:
                 try:
                     await message.reply(content=reply)
@@ -84,8 +99,7 @@ def build_botpy_client(connector: Any):
 
         async def on_at_message_create(self, message):
             frame = _frame_from_at_message(message)
-            # 频道 @bot 走 group handler（语义最接近 — 都是公开多人场景）
-            reply = connector.handle_group_message(frame)
+            reply = await self._run_handler("handle_group_message", frame)
             if reply:
                 try:
                     await message.reply(content=reply)

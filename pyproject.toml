@@ -46,6 +46,7 @@ packages = ["src/agent_platform"]
 agent_platform = "agent_platform.interfaces.cli:cli_main"
 stock-recap-mcp = "agent_platform.interfaces.mcp_stdio:main"
 agent_platform-tools-mcp = "agent_platform.tools_server:run_server"
+agent-platform-qq-bot = "agent_platform.adapters.qq.__main__:main"
 
 # 内置 Agent 通过本 entry_point 自动被 ``runtime.discover_agents`` 发现；
 # ``factory._register_builtin_agents`` 已显式调用一次，两条路径都 OK，便于 editable install。

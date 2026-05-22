@@ -114,6 +114,35 @@ API 文档访问：http://localhost:8000/docs
 
 ---
 
+### QQ 机器人
+
+在 `.env` 中配置（见 `.env.example` 中 ``QQ_BOT_*`` 段）：
+
+```bash
+QQ_BOT_ENABLED=true
+QQ_BOT_APP_ID=你的AppID
+QQ_BOT_CLIENT_SECRET=你的ClientSecret
+QQ_BOT_RECAP_PROVIDER=live
+QQ_BOT_RECAP_FORCE_LLM=true
+RECAP_GEMINI_CLI_CMD=gemini   # 或 RECAP_MODEL / QQ_BOT_RECAP_MODEL
+```
+
+启动长连接（阻塞进程，建议单独终端或 systemd）：
+
+```bash
+uv run agent-platform-qq-bot
+# 等价：uv run python -m agent_platform.adapters.qq
+```
+
+使用方式：
+
+- **QQ 群**：@ 机器人后发消息（默认触发日终复盘；含「策略」「明天」走次日策略）
+- **私聊**：直接发文字即可
+
+单次复盘可能耗时 1～2 分钟，已在 botpy 事件里用线程池执行，不阻塞心跳。
+
+---
+
 ### 其他命令
 
 ```bash
