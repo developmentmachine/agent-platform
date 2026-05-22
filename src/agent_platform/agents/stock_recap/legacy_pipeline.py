@@ -461,6 +461,7 @@ def _build_generate_response(state: RecapAgentRunState) -> GenerateResponse:
             "entity_block_count": len(state.memory_entities or []),
         },
         push_result=state.push_result,
+        error=state.llm_error,
     )
 
 

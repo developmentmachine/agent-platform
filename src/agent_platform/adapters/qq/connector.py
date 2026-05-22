@@ -169,13 +169,16 @@ class QqBotConnector:
             logger.exception("qq runtime.run failed")
             return f"⚠ 处理失败：{e}"
 
+        if resp.errors:
+            return _truncate_reply(f"⚠ {resp.errors[0]}")
+
         rendered = (
             resp.rendered.get("wechat_text")
             or resp.rendered.get("markdown")
             or ""
         )
-        if not rendered and resp.payload:
-            err = resp.payload.get("error") if isinstance(resp.payload, dict) else None
+        if not rendered and isinstance(resp.payload, dict):
+            err = resp.payload.get("error")
             if err:
                 rendered = f"⚠ {err}"
         if not rendered:

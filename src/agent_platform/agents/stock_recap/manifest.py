@@ -49,6 +49,11 @@ def _runner(
     if envelope.stream:
         return _stream(req, settings, run_ctx)
     resp: GenerateResponse = generate_once(req, settings, ctx=run_ctx)
+    errors: List[str] = []
+    if resp.error:
+        errors.append(resp.error)
+    elif resp.recap is None and req.force_llm:
+        errors.append("generate_failed: no recap produced")
     return AgentResponseEnvelope(
         agent_id=AGENT_ID,
         request_id=run_ctx.request_id,
@@ -57,7 +62,7 @@ def _runner(
             "markdown": resp.rendered_markdown or "",
             "wechat_text": resp.rendered_wechat_text or "",
         },
-        errors=[resp.error] if resp.error else [],
+        errors=errors,
     )
 
 
