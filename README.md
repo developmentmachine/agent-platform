@@ -42,7 +42,17 @@ uv run agent_platform <agent-name> [参数]
 
 ```bash
 uv run agent_platform --help
+uv run agent_platform --list-agents
 uv run agent_platform stock-recap --help
+```
+
+### 架构（v2）
+
+通用 Agent 平台分层与迁移说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)；扩展新 Agent 见 [docs/extending-agents.md](docs/extending-agents.md)。
+
+```bash
+# 架构边界检查（CI 同款）
+uv run lint-imports
 ```
 
 > **免 `uv run` 前缀**：执行 `uv tool install --editable .` 将平台安装为全局命令，

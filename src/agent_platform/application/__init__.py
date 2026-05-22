@@ -1,5 +1,8 @@
-"""W3 起本包仅作 backwards-compat shim 聚合：所有 recap 业务已迁入
-``agent_platform.agents.stock_recap.*``。lazy ``__getattr__`` 避免触发循环导入。
+"""平台 application 层（W7 后）。
+
+recap 业务已迁入 ``agent_platform.agents.stock_recap.*``；本包 ``__getattr__`` 仅保留
+少量符号的 lazy re-export（``generate_once`` 等），供尚未改 import 的外部脚本过渡。
+新代码请直接 import ``agents.stock_recap``。
 """
 
 

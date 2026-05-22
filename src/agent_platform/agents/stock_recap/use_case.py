@@ -43,7 +43,7 @@ def generate_once(
 ) -> GenerateResponse:
     """
     单次生成流程：采集 → 特征 → prompt → LLM → 评测 → 持久化 → 推送。
-    具体阶段见 ``application.orchestration.pipeline.execute_recap_pipeline``。
+    具体阶段见 ``agents.stock_recap.legacy_pipeline.execute_recap_pipeline``。
 
     ``defer_evolution_backtest=True`` 时不在本调用内执行进化检查与策略回测（供 HTTP
     层用 BackgroundTasks 延后执行，以缩短响应尾部延迟）；推送仍在请求内完成。
