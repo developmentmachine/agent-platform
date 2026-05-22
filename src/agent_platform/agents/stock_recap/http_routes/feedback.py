@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from agent_platform.application.memory.manager import check_and_run_evolution
+from agent_platform.agents.stock_recap.memory.manager import check_and_run_evolution
 from agent_platform.config.settings import Settings, get_settings
 from agent_platform.domain.models import FeedbackRequest
 from agent_platform.domain.principal import PrincipalContext

@@ -27,8 +27,8 @@ from agent_platform.domain.models import (
     LlmBudgetExceeded,
     LlmBusinessError,
 )
-from agent_platform.infrastructure.data.collector import collect_snapshot
-from agent_platform.infrastructure.data.features import build_features
+from agent_platform.agents.stock_recap.data.collector import collect_snapshot
+from agent_platform.agents.stock_recap.data.features import build_features
 from agent_platform.infrastructure.llm.backends import call_llm, model_effective
 from agent_platform.agents.stock_recap.llm.eval import auto_eval
 from agent_platform.agents.stock_recap.llm.prompts import build_messages

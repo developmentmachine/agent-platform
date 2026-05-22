@@ -32,7 +32,7 @@ from agent_platform.domain.models import (
     RecapDaily,
     RecapStrategy,
 )
-from agent_platform.infrastructure.llm.parse import (
+from agent_platform.agents.stock_recap.llm.parse import (
     _stable_json,
     parse_and_validate as _parse_and_validate,
     parse_json_from_text,

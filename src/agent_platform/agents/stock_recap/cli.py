@@ -11,19 +11,19 @@ from typing import Any
 
 import uvicorn
 
-from agent_platform.application.memory.manager import (
+from agent_platform.agents.stock_recap.memory.manager import (
     check_and_run_evolution,
     get_prompt_version,
     load_evolution_guidance,
     load_recent_memory,
 )
-from agent_platform.application.recap import _try_run_backtest, generate_once
+from agent_platform.agents.stock_recap.use_case import _try_run_backtest, generate_once
 from agent_platform.config.settings import Settings
 from agent_platform.domain.models import GenerateRequest
-from agent_platform.infrastructure.data.collector import collect_snapshot
-from agent_platform.infrastructure.data.features import build_features
+from agent_platform.agents.stock_recap.data.collector import collect_snapshot
+from agent_platform.agents.stock_recap.data.features import build_features
 from agent_platform.infrastructure.llm.backends import llm_backend_effective, model_effective
-from agent_platform.infrastructure.llm.prompts import build_messages
+from agent_platform.agents.stock_recap.llm.prompts import build_messages
 from agent_platform.infrastructure.persistence.db import load_feedback_summary, load_history
 from agent_platform.infrastructure.push.wechat import test_push
 from agent_platform.interfaces.scheduler.jobs import start_scheduler
@@ -122,7 +122,7 @@ def run(
     parser: argparse.ArgumentParser,
 ) -> int:
     """执行 stock-recap agent，返回 exit code。"""
-    from agent_platform.infrastructure.data.collector import list_data_provider_ids
+    from agent_platform.agents.stock_recap.data.collector import list_data_provider_ids
 
     _pid = (args.provider or "").strip().lower()
     _allowed = set(list_data_provider_ids())

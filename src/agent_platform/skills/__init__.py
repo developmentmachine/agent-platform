@@ -4,7 +4,7 @@ Agent Skills 包（业界常见「manifest + SKILL.md」形态）。
 - 通用写作与数据约束：``agent_platform.resources.prompts``（偏「底座」）
 - 任务级规程与扩展点：本包（偏「可插拔 skill」）
 
-运行时由 ``infrastructure.llm.prompts`` 将 skill 正文叠加进 system prompt。
+运行时由 ``agents.stock_recap.llm.prompts`` 将 skill 正文叠加进 system prompt。
 """
 
 from agent_platform.skills.loader import (

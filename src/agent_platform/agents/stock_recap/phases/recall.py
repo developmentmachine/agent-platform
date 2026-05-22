@@ -9,7 +9,7 @@ class RecallPhase(RecapPhase):
     name = "recall"
 
     def run(self, state: RecapRunState) -> None:
-        from agent_platform.application.orchestration import pipeline as legacy
+        from agent_platform.agents.stock_recap import legacy_pipeline as legacy
         legacy._phase_recall(state, self._tracer())
 
 

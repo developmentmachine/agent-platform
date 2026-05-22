@@ -93,6 +93,8 @@ def discover_agents(registry: Optional[AgentRegistry] = None) -> AgentRegistry:
         return reg
 
     for ep in selected:
+        if reg.has(ep.name):
+            continue
         try:
             obj = ep.load()
         except Exception as e:

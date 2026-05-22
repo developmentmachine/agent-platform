@@ -20,8 +20,8 @@ from agent_platform.agents.stock_recap.phases import (
 )
 from agent_platform.agents.stock_recap.pipeline_v2 import execute_v2, iter_ndjson_v2
 from agent_platform.agents.stock_recap.state import RecapRunState
-from agent_platform.application.orchestration.context import RecapAgentRunState
-from agent_platform.application.orchestration.pipeline import execute_recap_pipeline
+from agent_platform.agents.stock_recap.recap_state import RecapAgentRunState
+from agent_platform.agents.stock_recap.legacy_pipeline import execute_recap_pipeline
 from agent_platform.config.settings import Settings
 from agent_platform.domain.models import GenerateRequest
 from agent_platform.domain.run_context import RunContext
@@ -82,7 +82,7 @@ def test_phase_run_delegates_to_legacy_function(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
     """PerceivePhase.run 必须调用历史 _phase_perceive。"""
-    from agent_platform.application.orchestration import pipeline as legacy
+    from agent_platform.agents.stock_recap import legacy_pipeline as legacy
 
     called: List[Tuple[str, object]] = []
 
@@ -102,7 +102,7 @@ def test_phase_run_delegates_to_legacy_function(
 
 
 def test_phase_stream_emits_start_then_end(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    from agent_platform.application.orchestration import pipeline as legacy
+    from agent_platform.agents.stock_recap import legacy_pipeline as legacy
     from agent_platform.core.orchestration.stream_events import StreamEventKind
 
     monkeypatch.setattr(legacy, "_phase_perceive", lambda state, tracer: None)

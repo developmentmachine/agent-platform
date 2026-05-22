@@ -113,7 +113,7 @@ def _stable_json(obj: Any) -> str:
 
 
 def _is_trading_today() -> bool:
-    from agent_platform.infrastructure.data.calendar import is_trading_day
+    from agent_platform.agents.stock_recap.data.calendar import is_trading_day
 
     today = datetime.now().strftime("%Y-%m-%d")
     return is_trading_day(today)

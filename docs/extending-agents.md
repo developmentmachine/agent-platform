@@ -182,9 +182,9 @@ class MyDataSource:
 这里串联数据采集 → 构建 prompt → 调用 LLM → 处理输出。**直接复用平台层的 pipeline 和工具**，不需要重新实现：
 
 ```python
-from agent_platform.application.orchestration.pipeline import run_pipeline
-from agent_platform.application.orchestration.context import RunContext
-from agent_platform.infrastructure.llm.prompts import build_messages
+from agent_platform.agents.stock_recap.legacy_pipeline import run_pipeline
+from agent_platform.agents.stock_recap.recap_state import RunContext
+from agent_platform.agents.stock_recap.llm.prompts import build_messages
 from agent_platform.config.settings import Settings
 
 async def run_my_agent(settings: Settings, mode: str = "my_agent") -> str:

@@ -1,6 +1,6 @@
 """日终复盘 Markdown / 体例渲染。"""
 from agent_platform.domain.models import RecapDaily, RecapDailySection
-from agent_platform.presentation.render.renderers import (
+from agent_platform.agents.stock_recap.render import (
     daily_headline_and_bullet_matrix,
     render_markdown,
 )

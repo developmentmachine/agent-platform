@@ -184,13 +184,13 @@ resp = runtime.run(
 
 | 阶段 | 内容 | 当前状态 |
 |------|------|----------|
-| **W1：结构重构** | 新顶层包骨架 + Ports + Pipeline + Registry + Bus + 入口适配 + WeCom/QQ 骨架 + 文档 + import-linter | ✅ **已完成（本 commit）** |
-| W2：MCP 物理切换 | 删除本地 function-calling 注册表；`RecapToolRunner` → `McpToolGateway` | 待开始 |
-| W3：recap 物理迁入 `agents/stock_recap/` | `application/recap`、`infrastructure/data`、`prompts`、`skills` 物理移动 | 待开始 |
-| W4：recap 类化为 `Phase` | `_phase_*` 函数 → Phase 子类；引入 `RecapRunState(RunState)` | 待开始 |
-| W5：WeCom/QQ SDK 接入 | 落地真正的 WS 长连接、加密、token 刷新 | 待开始 |
-| W6：CLI/HTTP/Scheduler 按 Registry 自动装配 | 删 AGENTS 字典、删硬编码路由 | 待开始 |
-| W7：删 deprecation shim + 文档收尾 + import-linter 转 error 级 | 老路径全部删除；CI 阻断违规 | 待开始 |
+| **W1：结构重构** | 新顶层包骨架 + Ports + Pipeline + Registry + Bus + 入口适配 + WeCom/QQ 骨架 + 文档 + import-linter | ✅ 已完成 |
+| **W2：MCP 物理切换** | `tools_server` 独一真实源；`RecapToolRunner` → `McpToolGateway` | ✅ 已完成 |
+| **W3：recap 物理迁入 `agents/stock_recap/`** | data / llm / effects / prompts / skills / cli / http_routes | ✅ 已完成 |
+| **W4：recap 类化为 `Phase`** | `_phase_*` → Phase 子类；`pipeline_v2` 并行入口 | ✅ 已完成 |
+| **W5：WeCom/QQ SDK 接入** | botpy WS + 企微 AES webhook | ✅ 已完成 |
+| **W6：CLI/HTTP/Scheduler 自动装配** | `AgentRegistry` 驱动，无硬编码 AGENTS | ✅ 已完成 |
+| **W7：删 deprecation shim** | 全库 canonical import；CI `lint-imports` | ✅ 已完成 |
 
 ---
 

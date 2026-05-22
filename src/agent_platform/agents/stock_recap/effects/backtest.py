@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, List
 
 from agent_platform.domain.models import RecapStrategy
-from agent_platform.infrastructure.data.collector import collect_snapshot
+from agent_platform.agents.stock_recap.data.collector import collect_snapshot
 from agent_platform.agents.stock_recap.llm.eval import compute_backtest
 from agent_platform.infrastructure.persistence.db import (
     get_pending_backtest,

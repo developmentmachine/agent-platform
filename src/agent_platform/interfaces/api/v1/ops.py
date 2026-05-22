@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
-from agent_platform.application.memory.manager import get_prompt_version
+from agent_platform.agents.stock_recap.memory.manager import get_prompt_version
 from agent_platform.config.settings import Settings, get_settings
 from agent_platform.infrastructure.persistence.db import (
     init_db,

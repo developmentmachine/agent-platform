@@ -22,7 +22,7 @@ from agent_platform.domain.registries import (
     reset_default_backend_registry,
     reset_default_mode_registry,
 )
-from agent_platform.infrastructure.llm.parse import parse_and_validate
+from agent_platform.agents.stock_recap.llm.parse import parse_and_validate
 from agent_platform.infrastructure.llm.resolve import _model_prefix_to_backend
 
 

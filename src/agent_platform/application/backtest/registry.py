@@ -16,7 +16,7 @@ def register_backtest_strategy(name: str, impl: BacktestStrategy) -> None:
 def _ensure_builtin() -> None:
     if _REGISTRY:
         return
-    from agent_platform.infrastructure.evaluation.backtest_strategies import (
+    from agent_platform.agents.stock_recap.backtest_strategies import (
         KeywordSubstringBacktestStrategy,
         NormalizedTokenOverlapBacktestStrategy,
     )

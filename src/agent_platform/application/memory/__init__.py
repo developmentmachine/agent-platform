@@ -1,6 +1,6 @@
 """记忆加载与进化闭环（用例子模块）。"""
 
-from agent_platform.application.memory.manager import (
+from agent_platform.agents.stock_recap.memory.manager import (
     check_and_run_evolution,
     extract_market_patterns,
     get_prompt_version,

@@ -10,7 +10,7 @@ from typing import Iterator, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from agent_platform.application.recap import generate_once, iter_generate_ndjson
+from agent_platform.agents.stock_recap.use_case import generate_once, iter_generate_ndjson
 from agent_platform.application.side_effects import run_deferred_post_recap
 from agent_platform.config.settings import Settings, get_settings
 from agent_platform.domain.models import GenerateRequest, GenerateResponse

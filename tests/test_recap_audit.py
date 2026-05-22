@@ -140,7 +140,7 @@ def test_pipeline_writes_audit_when_enabled(tmp_path, monkeypatch):
     monkeypatch.setenv("RECAP_PUSH_ENABLED", "false")
     monkeypatch.setenv("RECAP_AUDIT_ENABLED", "true")
 
-    from agent_platform.application.recap import generate_once
+    from agent_platform.agents.stock_recap.use_case import generate_once
     import agent_platform.config.settings as _settings_mod
     _settings_mod._settings_instance = None  # noqa: SLF001
     settings = _settings_mod.Settings()
@@ -171,7 +171,7 @@ def test_pipeline_skips_audit_when_disabled(tmp_path, monkeypatch):
     monkeypatch.setenv("RECAP_PUSH_ENABLED", "false")
     monkeypatch.setenv("RECAP_AUDIT_ENABLED", "false")
 
-    from agent_platform.application.recap import generate_once
+    from agent_platform.agents.stock_recap.use_case import generate_once
     import agent_platform.config.settings as _settings_mod
     from agent_platform.domain.models import GenerateRequest
 

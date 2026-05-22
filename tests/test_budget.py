@@ -16,8 +16,8 @@ from typing import Dict, List, Tuple
 import pytest
 
 from agent_platform.application.orchestration.budget import AgentBudget
-from agent_platform.application.orchestration.context import RecapAgentRunState
-from agent_platform.application.orchestration.pipeline import _check_budget_between_phases
+from agent_platform.agents.stock_recap.recap_state import RecapAgentRunState
+from agent_platform.agents.stock_recap.legacy_pipeline import _check_budget_between_phases
 from agent_platform.config.settings import Settings
 from agent_platform.domain.models import (
     GenerateRequest,
@@ -142,7 +142,7 @@ def test_check_budget_between_phases_skips_act_and_critique(
 
 def test_act_phase_handles_budget_exceeded_gracefully(monkeypatch: pytest.MonkeyPatch) -> None:
     """provider 抛 ``LlmBudgetExceeded`` 时 act 节点不应让整个 pipeline 崩。"""
-    from agent_platform.application.orchestration import pipeline as pipeline_mod
+    from agent_platform.agents.stock_recap import legacy_pipeline as pipeline_mod
     from agent_platform.infrastructure.llm import backends as backends_mod
 
     s = _settings(monkeypatch)

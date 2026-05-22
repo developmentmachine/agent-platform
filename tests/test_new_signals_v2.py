@@ -98,7 +98,7 @@ def test_fetch_industry_5d_strength_with_fake_ak():
 
 def test_extract_market_patterns_skips_non_openai_backend():
     """gemini-cli backend 时不应触发 openai 调用。"""
-    from agent_platform.application.memory.manager import extract_market_patterns
+    from agent_platform.agents.stock_recap.memory.manager import extract_market_patterns
 
     settings = SimpleNamespace(
         llm_backend="gemini-cli",
@@ -121,7 +121,7 @@ def test_extract_market_patterns_skips_non_openai_backend():
 
 
 def test_check_and_run_evolution_skips_non_openai_backend():
-    from agent_platform.application.memory.manager import check_and_run_evolution
+    from agent_platform.agents.stock_recap.memory.manager import check_and_run_evolution
 
     settings = SimpleNamespace(
         llm_backend="gemini-cli",
