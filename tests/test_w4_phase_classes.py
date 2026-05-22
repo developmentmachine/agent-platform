@@ -174,3 +174,38 @@ def test_iter_ndjson_v2_emits_meta_phases_result(
         "index_memory",
         "reflect",
     ]
+
+
+def test_use_case_routes_pipeline_v2_flag(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    from agent_platform.agents.stock_recap import use_case as uc
+
+    s = _settings(monkeypatch, tmp_path)
+    req = GenerateRequest(mode="daily", provider="mock", force_llm=False)
+    calls: list[str] = []
+
+    from unittest.mock import MagicMock
+
+    monkeypatch.setattr(uc, "validate_generate_request", lambda _req: None)
+    monkeypatch.setattr(uc, "configure_tracing", lambda _s: None)
+
+    def _stub_v2(_state):
+        calls.append("v2")
+        return MagicMock(request_id="v2")
+
+    def _stub_legacy(_state):
+        calls.append("legacy")
+        return MagicMock(request_id="legacy")
+
+    monkeypatch.setattr(uc, "execute_v2", _stub_v2)
+    monkeypatch.setattr(uc, "execute_recap_pipeline", _stub_legacy)
+
+    monkeypatch.setenv("RECAP_PIPELINE_V2", "true")
+    uc.generate_once(req, Settings())
+    assert calls == ["v2"]
+
+    calls.clear()
+    monkeypatch.setenv("RECAP_PIPELINE_V2", "false")
+    uc.generate_once(req, Settings())
+    assert calls == ["legacy"]

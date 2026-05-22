@@ -15,6 +15,7 @@ from agent_platform.agents.stock_recap.legacy_pipeline import (
     execute_recap_pipeline,
     iter_recap_agent_ndjson,
 )
+from agent_platform.agents.stock_recap.pipeline_v2 import execute_v2, iter_ndjson_v2
 from agent_platform.application.side_effects import run_deferred_post_recap, try_run_backtest
 from agent_platform.config.settings import Settings
 from agent_platform.domain.models import GenerateRequest, GenerateResponse
@@ -22,6 +23,10 @@ from agent_platform.domain.run_context import RunContext
 from agent_platform.observability.runtime_context import current_budget, current_run_context
 from agent_platform.observability.tracing import configure_tracing, get_tracer
 from agent_platform.policy.guardrails import validate_generate_request
+
+
+def _use_pipeline_v2(settings: Settings) -> bool:
+    return bool(getattr(settings, "pipeline_v2", True))
 
 
 def _current_tenant_id() -> Optional[str]:
@@ -43,7 +48,7 @@ def generate_once(
 ) -> GenerateResponse:
     """
     单次生成流程：采集 → 特征 → prompt → LLM → 评测 → 持久化 → 推送。
-    具体阶段见 ``agents.stock_recap.legacy_pipeline.execute_recap_pipeline``。
+    编排由 ``RECAP_PIPELINE_V2`` 选择 pipeline_v2（Phase 类）或 legacy_pipeline。
 
     ``defer_evolution_backtest=True`` 时不在本调用内执行进化检查与策略回测（供 HTTP
     层用 BackgroundTasks 延后执行，以缩短响应尾部延迟）；推送仍在请求内完成。
@@ -84,6 +89,8 @@ def generate_once(
                 span = trace.get_current_span()
                 span.set_attribute("recap.session_id", run_ctx.session_id)
 
+            if _use_pipeline_v2(settings):
+                return execute_v2(state)
             return execute_recap_pipeline(state)
     finally:
         current_budget.reset(budget_token)
@@ -132,7 +139,10 @@ def iter_generate_ndjson(
     prev_budget = current_budget.get()
     current_budget.set(state.budget)
     try:
-        yield from iter_recap_agent_ndjson(state)
+        if _use_pipeline_v2(settings):
+            yield from iter_ndjson_v2(state)
+        else:
+            yield from iter_recap_agent_ndjson(state)
     finally:
         current_budget.set(prev_budget)
         current_run_context.set(prev_ctx)

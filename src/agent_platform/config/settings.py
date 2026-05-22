@@ -212,6 +212,14 @@ class Settings(BaseSettings):
             "messages 再调一次 LLM。设 0 关闭。"
         ),
     )
+    pipeline_v2: bool = Field(
+        default=True,
+        alias="RECAP_PIPELINE_V2",
+        description=(
+            "为 true 时 generate/stream 走 Phase 类编排（pipeline_v2）；"
+            "false 时回退 legacy_pipeline（排障对比用）。"
+        ),
+    )
 
     # Outbox（pending_actions）周期 sweep 间隔（秒）；最小 15s。
     outbox_sweep_interval_seconds: int = Field(

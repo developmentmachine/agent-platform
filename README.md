@@ -55,6 +55,12 @@ uv run agent_platform stock-recap --help
 uv run lint-imports
 ```
 
+默认使用 **pipeline v2**（`RECAP_PIPELINE_V2=true`，Phase 类编排）。若需对比旧路径：
+
+```bash
+RECAP_PIPELINE_V2=false uv run agent_platform stock-recap --mode daily --provider mock --no-llm
+```
+
 > **免 `uv run` 前缀**：执行 `uv tool install --editable .` 将平台安装为全局命令，
 > 之后可直接使用 `agent_platform stock-recap ...`（代码修改实时生效）。
 
