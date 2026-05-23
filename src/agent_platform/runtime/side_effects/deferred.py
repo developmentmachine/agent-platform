@@ -14,11 +14,11 @@ import json
 import logging
 from typing import Any, Dict
 
-from agent_platform.application.side_effects import outbox
+import agent_platform.runtime.side_effects.outbox as outbox
 from agent_platform.agents.stock_recap.effects.backtest import try_run_backtest
 from agent_platform.agents.stock_recap.effects.evolution import run_deferred_evolution
 
-logger = logging.getLogger("agent_platform.side_effects.deferred")
+logger = logging.getLogger("agent_platform.runtime.side_effects.deferred")
 
 
 def _stable_json(obj: Any) -> str:

@@ -1,8 +1,6 @@
-"""W3 起：recap-specific 副作用 (backtest/evolution/push) 物理迁入
-``agents.stock_recap.effects``；本包保留 platform-level 副作用 (outbox/deferred)
-与 lazy shim attribute resolution。
-"""
-from agent_platform.application.side_effects import outbox  # noqa: F401 — 平台级
+"""Backward-compat facade：平台副作用在 ``runtime.side_effects``，recap 动作在 agents。"""
+from agent_platform.runtime.side_effects import outbox  # noqa: F401
+from agent_platform.runtime.side_effects.deferred import run_deferred_post_recap
 
 
 def __getattr__(name: str):
@@ -22,12 +20,6 @@ def __getattr__(name: str):
         )
 
         return run_deferred_evolution
-    if name == "run_deferred_post_recap":
-        from agent_platform.application.side_effects.deferred import (
-            run_deferred_post_recap,
-        )
-
-        return run_deferred_post_recap
     raise AttributeError(name)
 
 

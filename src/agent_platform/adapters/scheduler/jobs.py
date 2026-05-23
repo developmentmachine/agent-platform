@@ -16,8 +16,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from agent_platform.application.side_effects import deferred as _deferred  # noqa: F401  注册 outbox handler
-from agent_platform.application.side_effects import outbox
+from agent_platform.runtime.side_effects import deferred as _deferred  # noqa: F401  注册 outbox handler
+from agent_platform.runtime.side_effects import outbox
 from agent_platform.config.settings import Settings
 from agent_platform.core.registry.agent_definition import ScheduledJob
 

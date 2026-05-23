@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Tuple
 import pytest
 from fastapi.testclient import TestClient
 
-from agent_platform.application.side_effects import outbox
+from agent_platform.runtime.side_effects import outbox
 from agent_platform.config.settings import Settings
 from agent_platform.core.domain.models import (
     GenerateRequest,

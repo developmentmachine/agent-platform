@@ -1,7 +1,7 @@
 """回测评分器注册与多实现。"""
 from __future__ import annotations
 
-from agent_platform.application.backtest.registry import resolve_backtest_strategy
+from agent_platform.agents.stock_recap.backtest.registry import resolve_backtest_strategy
 from agent_platform.core.domain.models import MarketSnapshot, RecapStrategy
 
 

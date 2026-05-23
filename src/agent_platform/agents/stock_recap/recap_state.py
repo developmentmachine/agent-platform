@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from agent_platform.application.orchestration.budget import AgentBudget
+from agent_platform.core.runtime.budget import AgentBudget
 from agent_platform.config.settings import Settings
 from agent_platform.core.domain.models import Features, GenerateRequest, LlmTokens, MarketSnapshot, Recap
 from agent_platform.domain.run_context import RunContext

@@ -13,7 +13,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 
-from agent_platform.application.jobs import (
+from agent_platform.runtime.jobs import (
     get_job,
     list_jobs_for_api,
     run_recap_job,
