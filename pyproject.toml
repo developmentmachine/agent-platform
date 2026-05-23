@@ -54,6 +54,7 @@ agent-platform-wecom-bot = "agent_platform.adapters.wecom.__main__:main"
 # ``factory._register_builtin_agents`` 已显式调用一次，两条路径都 OK，便于 editable install。
 [project.entry-points."agent_platform.agents"]
 stock-recap = "agent_platform.agents.stock_recap.manifest:register"
+hsk30-tutor = "agent_platform.agents.hsk30_tutor.manifest:register"
 
 [project.entry-points."agent_platform.prompts"]
 stock-recap = "agent_platform.agents.stock_recap.prompts:bundle_root"
@@ -120,6 +121,7 @@ forbidden_modules = [
 # 不属于 "adapters 直接依赖 agents/application" 的违规。
 ignore_imports = [
     "agent_platform.runtime.factory -> agent_platform.agents.stock_recap.manifest",
+    "agent_platform.runtime.factory -> agent_platform.agents.hsk30_tutor.manifest",
 ]
 
 [[tool.importlinter.contracts]]

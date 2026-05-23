@@ -36,15 +36,14 @@ def _load_registry():
 
     HTTP 入口可以在 ``app.include_router`` 之前安全调用 — 不会启动事件循环。
     """
-    from agent_platform.agents.stock_recap import manifest as stock_recap_manifest
     from agent_platform.core.registry.agent_registry import (
         discover_agents,
         get_default_registry,
     )
+    from agent_platform.runtime.factory import register_builtin_agents
 
     reg = get_default_registry()
-    if not reg.has(stock_recap_manifest.AGENT_ID):
-        stock_recap_manifest.register(reg)
+    register_builtin_agents(reg)
     discover_agents(reg)
     return reg
 

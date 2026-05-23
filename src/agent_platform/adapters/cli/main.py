@@ -32,17 +32,14 @@ def _setup_logger(level: str) -> logging.Logger:
 
 def _load_registry():
     """触发 builtin agent 注册 + entry_points 发现。"""
-    # builtin agent — 通过 runtime.create_runtime() 同步触发 register；
-    # 这里只需要 import manifest 即可（manifest 不自注册，需手动调 register）。
-    from agent_platform.agents.stock_recap import manifest as stock_recap_manifest
     from agent_platform.core.registry.agent_registry import (
         discover_agents,
         get_default_registry,
     )
+    from agent_platform.runtime.factory import register_builtin_agents
 
     reg = get_default_registry()
-    if not reg.has(stock_recap_manifest.AGENT_ID):
-        stock_recap_manifest.register(reg)
+    register_builtin_agents(reg)
     discover_agents(reg)
     return reg
 
