@@ -81,15 +81,15 @@ def test_each_phase_satisfies_core_phase_protocol() -> None:
 def test_phase_run_delegates_to_legacy_function(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
-    """PerceivePhase.run 必须调用历史 _phase_perceive。"""
-    from agent_platform.agents.stock_recap import legacy_pipeline as legacy
+    """PerceivePhase.run 必须走 phases.perceive.run。"""
+    from agent_platform.agents.stock_recap.phases import perceive
 
     called: List[Tuple[str, object]] = []
 
     def _spy(state, tracer):
         called.append(("perceive", state))
 
-    monkeypatch.setattr(legacy, "_phase_perceive", _spy)
+    monkeypatch.setattr(perceive, "run", _spy)
     s = _settings(monkeypatch, tmp_path)
     state = RecapAgentRunState(
         request=GenerateRequest(mode="daily", provider="mock", force_llm=False),
