@@ -1,4 +1,4 @@
-"""CLI：``agent_platform hsk30-tutor`` 进入交互陪练；``-m`` / ``--once`` 保留脚本单轮。"""
+"""CLI：``agent-platform hsk30-tutor`` 进入交互陪练；``-m`` / ``--once`` 保留脚本单轮。"""
 from __future__ import annotations
 
 import argparse
@@ -31,9 +31,9 @@ def register_subparser(sub: argparse.ArgumentParser) -> None:
     sub.description = "HSK 3.0 对话陪练（默认交互模式）"
     sub.epilog = """
 示例:
-  agent_platform hsk30-tutor
-  agent_platform hsk30-tutor --level 2
-  agent_platform hsk30-tutor -m "请纠正我的句子" --once
+  agent-platform hsk30-tutor
+  agent-platform hsk30-tutor --level 2
+  agent-platform hsk30-tutor -m "请纠正我的句子" --once
 """
     sub.add_argument(
         "--message",

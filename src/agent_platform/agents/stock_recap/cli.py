@@ -45,18 +45,18 @@ def register_subparser(sub: argparse.ArgumentParser) -> None:
     sub.epilog = """
 示例:
   # 交互模式（默认）
-  agent_platform stock-recap
-  agent_platform stock-recap --provider mock
+  agent-platform stock-recap
+  agent-platform stock-recap --provider mock
 
   # 脚本单轮生成后退出
-  agent_platform stock-recap --once --mode daily --provider mock
+  agent-platform stock-recap --once --mode daily --provider mock
 
   # 启动 API 服务（含调度器）
-  RECAP_SCHEDULER_ENABLED=true agent_platform stock-recap --serve
+  RECAP_SCHEDULER_ENABLED=true agent-platform stock-recap --serve
 
   # 一次性管理命令（仍立即执行后退出）
-  agent_platform stock-recap --evolve
-  agent_platform stock-recap --history
+  agent-platform stock-recap --evolve
+  agent-platform stock-recap --history
 """
 
     action_group = sub.add_mutually_exclusive_group()

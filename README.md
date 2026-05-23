@@ -29,7 +29,7 @@ cp .env.example .env
 本项目是多智能体平台，通过子命令指定要运行的 agent：
 
 ```
-uv run agent_platform <agent-name> [参数]
+uv run agent-platform <agent-name> [参数]
 ```
 
 目前内置 agent：
@@ -41,9 +41,9 @@ uv run agent_platform <agent-name> [参数]
 查看帮助：
 
 ```bash
-uv run agent_platform --help
-uv run agent_platform --list-agents
-uv run agent_platform stock-recap --help
+uv run agent-platform --help
+uv run agent-platform --list-agents
+uv run agent-platform stock-recap --help
 ```
 
 ### 架构（v2）
@@ -58,11 +58,11 @@ uv run lint-imports
 默认使用 **pipeline v2**（`RECAP_PIPELINE_V2=true`，Phase 类编排）。若需对比旧路径：
 
 ```bash
-RECAP_PIPELINE_V2=false uv run agent_platform stock-recap --mode daily --provider mock --no-llm
+RECAP_PIPELINE_V2=false uv run agent-platform stock-recap --mode daily --provider mock --no-llm
 ```
 
 > **免 `uv run` 前缀**：执行 `uv tool install --editable .` 将平台安装为全局命令，
-> 之后可直接使用 `agent_platform stock-recap ...`（代码修改实时生效）。
+> 之后可直接使用 `agent-platform stock-recap ...`（代码修改实时生效）。
 
 ---
 
@@ -70,10 +70,10 @@ RECAP_PIPELINE_V2=false uv run agent_platform stock-recap --mode daily --provide
 
 ```bash
 # mock 数据，不调用 LLM，验证环境是否正常
-uv run agent_platform stock-recap --mode daily --provider mock --no-llm
+uv run agent-platform stock-recap --mode daily --provider mock --no-llm
 
 # mock 数据 + 查看将发给 LLM 的 payload
-uv run agent_platform stock-recap --mode daily --provider mock --dry-run
+uv run agent-platform stock-recap --mode daily --provider mock --dry-run
 ```
 
 ---
@@ -82,16 +82,16 @@ uv run agent_platform stock-recap --mode daily --provider mock --dry-run
 
 ```bash
 # 日终复盘（真实行情）
-uv run agent_platform stock-recap --mode daily --provider live --model cursor-cli
+uv run agent-platform stock-recap --mode daily --provider live --model cursor-cli
 
 # 次日策略
-uv run agent_platform stock-recap --mode strategy --provider live --model cursor-cli
+uv run agent-platform stock-recap --mode strategy --provider live --model cursor-cli
 
 # 指定日期
-uv run agent_platform stock-recap --mode daily --provider live --model cursor-cli --date 2024-01-02
+uv run agent-platform stock-recap --mode daily --provider live --model cursor-cli --date 2024-01-02
 
 # 不写文件，仅输出到 stdout
-uv run agent_platform stock-recap --mode daily --provider mock --no-write-files
+uv run agent-platform stock-recap --mode daily --provider mock --no-write-files
 ```
 
 provider 只有两个选项：
@@ -104,10 +104,10 @@ provider 只有两个选项：
 
 ```bash
 # 基础启动
-uv run agent_platform stock-recap --serve --host 0.0.0.0 --port 8000
+uv run agent-platform stock-recap --serve --host 0.0.0.0 --port 8000
 
 # 带调度器（每天 15:30 自动触发）
-RECAP_SCHEDULER_ENABLED=true uv run agent_platform stock-recap --serve
+RECAP_SCHEDULER_ENABLED=true uv run agent-platform stock-recap --serve
 ```
 
 API 文档访问：http://localhost:8000/docs
@@ -147,16 +147,16 @@ uv run agent-platform-qq-bot
 
 ```bash
 # 查看历史记录
-uv run agent_platform stock-recap --history --limit 20
+uv run agent-platform stock-recap --history --limit 20
 
 # 手动触发进化分析
-uv run agent_platform stock-recap --evolve
+uv run agent-platform stock-recap --evolve
 
 # 手动回测昨日策略
-uv run agent_platform stock-recap --backtest
+uv run agent-platform stock-recap --backtest
 
 # 测试企业微信推送
-RECAP_WXWORK_WEBHOOK_URL=https://... uv run agent_platform stock-recap --push-test
+RECAP_WXWORK_WEBHOOK_URL=https://... uv run agent-platform stock-recap --push-test
 ```
 
 ---
@@ -167,10 +167,10 @@ RECAP_WXWORK_WEBHOOK_URL=https://... uv run agent_platform stock-recap --push-te
 
 ```bash
 # 自定义路径
-RECAP_DB_PATH=./data/recap.db uv run agent_platform stock-recap --mode daily --provider mock
+RECAP_DB_PATH=./data/recap.db uv run agent-platform stock-recap --mode daily --provider mock
 
 # 仅单进程测试用：重启后数据清空，且多线程/多 worker 下不安全
-RECAP_DB_PATH=:memory: uv run agent_platform stock-recap --mode daily --provider mock
+RECAP_DB_PATH=:memory: uv run agent-platform stock-recap --mode daily --provider mock
 ```
 
 ---
@@ -286,9 +286,9 @@ RECAP_GEMINI_TIMEOUT_S=300
 运行：
 
 ```bash
-uv run agent_platform stock-recap --mode daily --provider mock
+uv run agent-platform stock-recap --mode daily --provider mock
 # 等价于：
-uv run agent_platform stock-recap --mode daily --provider mock --model gemini-cli
+uv run agent-platform stock-recap --mode daily --provider mock --model gemini-cli
 ```
 
 ---
@@ -310,7 +310,7 @@ RECAP_CURSOR_TIMEOUT_S=300
 或在命令行临时指定：
 
 ```bash
-uv run agent_platform stock-recap --mode daily --provider mock --model cursor-cli
+uv run agent-platform stock-recap --mode daily --provider mock --model cursor-cli
 ```
 
 ---
@@ -334,7 +334,7 @@ RECAP_OLLAMA_BASE_URL=http://127.0.0.1:11434
 或命令行指定：
 
 ```bash
-uv run agent_platform stock-recap --mode daily --provider mock --model ollama:qwen2.5:14b
+uv run agent-platform stock-recap --mode daily --provider mock --model ollama:qwen2.5:14b
 ```
 
 ---

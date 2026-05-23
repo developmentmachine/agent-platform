@@ -1,9 +1,9 @@
 """Agent Platform CLI 入口 — W6 起按 ``AgentRegistry`` 自动发现子命令。
 
 用法：
-  agent_platform <agent-id> [agent-specific args]
-  agent_platform --mcp-tools
-  agent_platform --list-agents
+  agent-platform <agent-id> [agent-specific args]
+  agent-platform --mcp-tools
+  agent-platform --list-agents
 
 新增 agent 时：在 ``agents/<id>/manifest.py`` 中声明
 ``cli_subparser_factory`` 与 ``cli_run_handler``，本 dispatcher 自动挂载，
@@ -46,7 +46,7 @@ def _load_registry():
 
 def cli_main() -> int:
     parser = argparse.ArgumentParser(
-        prog="agent_platform",
+        prog="agent-platform",
         description="Agent Platform — 多智能体运行平台",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

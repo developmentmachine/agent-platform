@@ -38,7 +38,7 @@ def test_cli_list_agents_includes_stock_recap(
     _reset_registry()
     from agent_platform.adapters.cli import main as cli_mod
 
-    monkeypatch.setattr("sys.argv", ["agent_platform", "--list-agents"])
+    monkeypatch.setattr("sys.argv", ["agent-platform", "--list-agents"])
     rc = cli_mod.cli_main()
     assert rc == 0
     captured = capsys.readouterr().out
@@ -51,7 +51,7 @@ def test_cli_subparser_registered_for_each_agent(monkeypatch: pytest.MonkeyPatch
     _reset_registry()
     from agent_platform.adapters.cli import main as cli_mod
 
-    monkeypatch.setattr("sys.argv", ["agent_platform", "stock-recap", "--help"])
+    monkeypatch.setattr("sys.argv", ["agent-platform", "stock-recap", "--help"])
     with pytest.raises(SystemExit) as ei:
         cli_mod.cli_main()
     assert ei.value.code == 0  # --help 正常退出

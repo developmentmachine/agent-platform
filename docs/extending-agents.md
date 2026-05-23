@@ -251,8 +251,8 @@ AGENTS: dict[str, Any] = {
 调用方式：
 
 ```bash
-uv run agent_platform my-agent --topic "本周科技行情" --provider mock
-uv run agent_platform my-agent --help
+uv run agent-platform my-agent --topic "本周科技行情" --provider mock
+uv run agent-platform my-agent --help
 ```
 
 ---
