@@ -82,7 +82,7 @@ def register(registry: AgentRegistry) -> None:
             runner=_runner,
             mcp_tool_names=[],
             skills=[],
-            cli_help="HSK 3.0 对话陪练（chat）",
+            cli_help="HSK 3.0 对话陪练（交互模式；--once -m 单轮）",
             http_path_prefix="/v1/hsk30-tutor",
             cli_subparser_factory=_cli_subparser,
             cli_run_handler=_cli_run,

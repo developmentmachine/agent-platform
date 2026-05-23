@@ -1,6 +1,7 @@
 """HSK 3.0 Tutor Agent：注册、对话、与 stock-recap 隔离。"""
 from __future__ import annotations
 
+import argparse
 import importlib
 
 import pytest
@@ -59,6 +60,25 @@ def test_hsk30_package_does_not_import_stock_recap():
     assert source_path
     text = open(source_path, encoding="utf-8").read()
     assert "stock_recap" not in text
+
+
+def test_cli_once_mode(settings_no_llm):
+    from argparse import Namespace
+
+    from agent_platform.agents.hsk30_tutor.cli import run
+
+    code = run(
+        Namespace(
+            once=True,
+            message="你好",
+            level=1,
+            locale="both",
+            json=False,
+        ),
+        settings_no_llm,
+        argparse.ArgumentParser(),
+    )
+    assert code == 0
 
 
 def test_http_chat_direct(settings_no_llm):

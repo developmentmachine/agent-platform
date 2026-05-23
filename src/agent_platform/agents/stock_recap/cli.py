@@ -17,6 +17,7 @@ from agent_platform.agents.stock_recap.memory.manager import (
     load_evolution_guidance,
     load_recent_memory,
 )
+from agent_platform.adapters.cli.repl import run_repl
 from agent_platform.agents.stock_recap.use_case import _try_run_backtest, generate_once
 from agent_platform.config.settings import Settings
 from agent_platform.core.domain.models import GenerateRequest
@@ -40,33 +41,21 @@ def _today_str() -> str:
 def register_subparser(sub: argparse.ArgumentParser) -> None:
     """向平台分发器注册 stock-recap 的所有参数。"""
     sub.formatter_class = argparse.RawDescriptionHelpFormatter
+    sub.description = "A 股日终复盘 / 次日策略（默认进入交互模式）"
     sub.epilog = """
 示例:
-  # mock 数据快速测试（无需网络/API key）
-  agent_platform stock-recap --mode daily --provider mock
+  # 交互模式（默认）
+  agent_platform stock-recap
+  agent_platform stock-recap --provider mock
 
-  # 实盘日终复盘（需要 OPENAI_API_KEY）
-  agent_platform stock-recap --mode daily --provider live
-
-  # 次日策略
-  agent_platform stock-recap --mode strategy --provider live
+  # 脚本单轮生成后退出
+  agent_platform stock-recap --once --mode daily --provider mock
 
   # 启动 API 服务（含调度器）
   RECAP_SCHEDULER_ENABLED=true agent_platform stock-recap --serve
 
-  # 干跑：查看将发给 LLM 的 payload
-  agent_platform stock-recap --dry-run --provider mock
-
-  # 测试企业微信推送
-  RECAP_WXWORK_WEBHOOK_URL=https://... agent_platform stock-recap --push-test
-
-  # 手动触发进化分析
+  # 一次性管理命令（仍立即执行后退出）
   agent_platform stock-recap --evolve
-
-  # 手动回测昨日策略
-  agent_platform stock-recap --backtest
-
-  # 查看运行历史
   agent_platform stock-recap --history
 """
 
@@ -114,6 +103,11 @@ def register_subparser(sub: argparse.ArgumentParser) -> None:
     sub.add_argument("--port", type=int, default=8000)
 
     sub.add_argument("--limit", type=int, default=10, help="历史记录数量")
+    sub.add_argument(
+        "--once",
+        action="store_true",
+        help="单轮模式：按当前参数生成一次报告后退出（不进入交互 REPL）",
+    )
 
 
 def run(
@@ -153,7 +147,133 @@ def run(
         return _cmd_backtest(settings, logger, args)
     if args.history:
         return _cmd_history(settings, logger, args)
-    return _cmd_generate(settings, logger, args)
+    if args.once or args.dry_run:
+        return _cmd_generate(settings, logger, args)
+    return _cmd_interactive(settings, logger, args, parser)
+
+
+_RECAP_HELP = """
+命令:
+  run [daily|strategy]  生成复盘/策略（默认用当前 mode）
+  daily / strategy      同 run daily / run strategy
+  dry-run               打印 LLM payload，不调用
+  history [N]           最近 N 条运行记录（默认 10）
+  evolve                手动触发进化分析
+  backtest [DATE]       回测（日期 YYYY-MM-DD，默认今天）
+  push-test             测试企业微信推送
+  set mode daily|strategy
+  set provider <id>     mock / live / akshare 等
+  set model <spec>      如 openai:gpt-4.1-mini
+  set date YYYY-MM-DD | clear date
+  status                显示当前参数
+  help                  本帮助
+  quit / exit           退出
+"""
+
+
+def _cmd_interactive(
+    settings: Settings,
+    logger: logging.Logger,
+    args: argparse.Namespace,
+    _parser: argparse.ArgumentParser,
+) -> int:
+    from agent_platform.agents.stock_recap.data.collector import list_data_provider_ids
+
+    allowed = set(list_data_provider_ids())
+
+    def on_line(line: str) -> bool:
+        parts = line.split()
+        if not parts:
+            return True
+        cmd = parts[0].lower()
+
+        if cmd in {"/quit", "quit", "/exit", "exit"}:
+            return False
+        if cmd in {"/help", "help"}:
+            print(_RECAP_HELP)
+            return True
+        if cmd == "status":
+            print(
+                _stable_json(
+                    {
+                        "mode": args.mode,
+                        "provider": args.provider,
+                        "model": args.model,
+                        "date": args.date,
+                        "no_llm": args.no_llm,
+                        "skip_trading_check": args.skip_trading_check,
+                        "output_dir": args.output_dir or settings.output_dir,
+                    }
+                )
+            )
+            return True
+        if cmd == "set" and len(parts) >= 3 and parts[1] == "mode":
+            if parts[2] not in ("daily", "strategy"):
+                print("mode 须为 daily 或 strategy")
+                return True
+            args.mode = parts[2]
+            print(f"(mode = {args.mode})")
+            return True
+        if cmd == "set" and len(parts) >= 3 and parts[1] == "provider":
+            pid = parts[2].strip().lower()
+            if pid not in allowed:
+                print(f"未知 provider；可用: {', '.join(sorted(allowed))}")
+                return True
+            args.provider = pid
+            print(f"(provider = {args.provider})")
+            return True
+        if cmd == "set" and len(parts) >= 3 and parts[1] == "model":
+            args.model = parts[2]
+            print(f"(model = {args.model})")
+            return True
+        if cmd == "set" and len(parts) >= 3 and parts[1] == "date":
+            if parts[2].lower() == "clear":
+                args.date = None
+                print("(date = 今天)")
+            else:
+                args.date = parts[2]
+                print(f"(date = {args.date})")
+            return True
+        if cmd == "history":
+            if len(parts) >= 2 and parts[1].isdigit():
+                args.limit = int(parts[1])
+            _cmd_history(settings, logger, args)
+            return True
+        if cmd == "evolve":
+            _cmd_evolve(settings, logger)
+            return True
+        if cmd == "backtest":
+            if len(parts) >= 2:
+                args.date = parts[1]
+            _cmd_backtest(settings, logger, args)
+            return True
+        if cmd == "push-test":
+            _cmd_push_test(settings, logger)
+            return True
+        if cmd == "dry-run":
+            args.dry_run = True
+            code = _cmd_generate(settings, logger, args)
+            args.dry_run = False
+            return code == 0
+        if cmd in {"run", "daily", "strategy"}:
+            if cmd in ("daily", "strategy"):
+                args.mode = cmd
+            elif len(parts) >= 2 and parts[1] in ("daily", "strategy"):
+                args.mode = parts[1]
+            print(f"\n--- 生成 {args.mode} ({args.provider}) ---\n")
+            code = _cmd_generate(settings, logger, args)
+            print()
+            return code == 0
+
+        print(f"未知命令: {parts[0]}  (输入 help 查看)")
+        return True
+
+    banner = (
+        "A 股复盘智能体 · 交互模式\n"
+        f"当前: mode={args.mode} provider={args.provider} "
+        f"model={args.model or '(默认)'}"
+    )
+    return run_repl(banner=banner, prompt="recap> ", on_line=on_line)
 
 
 # ─── 子命令实现 ────────────────────────────────────────────────────────────────
