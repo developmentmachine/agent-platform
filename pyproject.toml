@@ -91,10 +91,6 @@ forbidden_modules = [
     "agent_platform.adapters",
     "agent_platform.agents",
     "agent_platform.tools_server",
-    "agent_platform.application",
-    "agent_platform.infrastructure",
-    "agent_platform.interfaces",
-    "agent_platform.presentation",
 ]
 # 例外：core.runtime.contextvars 需读取 runtime.observability 的 ContextVar 槽位。
 ignore_imports = [
@@ -118,9 +114,7 @@ source_modules = [
 ]
 forbidden_modules = [
     "agent_platform.infra",
-    "agent_platform.infrastructure",
     "agent_platform.agents",
-    "agent_platform.application",
 ]
 # Composition Root（``runtime.factory``）按设计需显式注册内置 Agent；该链路
 # 不属于 "adapters 直接依赖 agents/application" 的违规。
@@ -133,24 +127,3 @@ name = "tools_server 不得 import 任何 Agent"
 type = "forbidden"
 source_modules = ["agent_platform.tools_server"]
 forbidden_modules = ["agent_platform.agents"]
-
-[[tool.importlinter.contracts]]
-name = "业务代码禁止引用遗留顶层包"
-type = "forbidden"
-source_modules = [
-    "agent_platform.agents",
-    "agent_platform.adapters",
-    "agent_platform.runtime",
-    "agent_platform.infra",
-    "agent_platform.tools_server",
-    "agent_platform.core",
-]
-forbidden_modules = [
-    "agent_platform.application",
-    "agent_platform.domain",
-    "agent_platform.infrastructure",
-    "agent_platform.interfaces",
-    "agent_platform.policy",
-    "agent_platform.observability",
-    "agent_platform.presentation",
-]

@@ -69,11 +69,8 @@
 | `tools_server/` | 独立 MCP server | `server.py` · `handlers/` |
 | `agents/<id>/` | 业务 Agent（互相隔离） | `manifest.py` · `domain/` · `phases/` · `prompts/` · `skills/` |
 | `adapters/` | Driving Adapters | `cli/` · `http/` · `wecom/` · `qq/` · `scheduler/` · `mcp_stdio/` |
-| `application/` · `domain/` · `observability/` · `policy/` · `presentation/` | **仅 backward-compat shim** | 真实实现已分别在 `core/` · `runtime/` · `infra/` · `agents/`；新代码勿再引用 |
 
-> **当前状态**：`infra/*`、`adapters/*`、`runtime/*`（含 `observability`、`jobs`、`side_effects`）、`core/domain/*`、`agents/<id>/` 为 **canonical 路径**；
-> `infrastructure/*`、`interfaces/*`、`application/*`、`domain/*`（子模块）、`policy/`、`observability/`、`presentation/` 仅保留 **shim**（`sys.modules` 别名或薄 re-export）。
-> 业务代码与测试以 `agent_platform.infra.*` / `agent_platform.adapters.*` / `agent_platform.runtime.*` 等为规范 import。
+> **当前状态**：`infra/*`、`adapters/*`、`runtime/*`（含 `observability`、`jobs`、`side_effects`）、`core/domain/*`、`agents/<id>/` 为唯一顶层包；原 `application/`、`domain/`、`infrastructure/`、`interfaces/`、`policy/`、`observability/`、`presentation/` 等遗留 shim **已删除**（W16）。
 
 ---
 
@@ -199,6 +196,7 @@ resp = runtime.run(
 | **W13：presentation 收尾** | 展示逻辑在 `agents/<id>/render.py`；`presentation/render` 为 shim | ✅ 已完成 |
 | **W14：Principal 合并** | `domain.principal` 与 `core.runtime.principal` 合一；单一 ContextVar | ✅ 已完成 |
 | **W15：canonical import** | 业务代码统一 `core.runtime` / `runtime` / `agents` 路径；import-linter 禁止遗留顶层包 | ✅ 已完成 |
+| **W16：删除 shim 包** | 物理移除 `application/`、`domain/`、`infrastructure/`、`interfaces/`、`policy/`、顶层 `observability/`、`presentation/` | ✅ 已完成 |
 
 ---
 

@@ -1,8 +1,7 @@
 """平台运行时上下文类型（与具体编排无关）。
 
-``RunContext`` / ``AgentBudget`` 的规范实现位于本子包；旧路径 ``domain.run_context``、
-``application.orchestration.budget`` 为 shim。新增的 ``PrincipalContext`` /
-``SessionContext`` / ``ContextVars`` 则首次定义在本子包。
+``RunContext`` / ``AgentBudget`` / ``PrincipalContext`` /
+``SessionContext`` 与 ContextVar 槽位定义在本子包。
 """
 from agent_platform.core.runtime.run_context import RunContext
 from agent_platform.core.runtime.principal import (
