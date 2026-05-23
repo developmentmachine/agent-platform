@@ -5,7 +5,7 @@ import importlib
 from typing import Any
 
 _SUBMODULES = frozenset(
-    {"llm", "persistence", "memory", "push", "tools", "mcp_client", "data"}
+    {"llm", "persistence", "memory", "push", "tools", "mcp_client", "data", "guardrail"}
 )
 
 

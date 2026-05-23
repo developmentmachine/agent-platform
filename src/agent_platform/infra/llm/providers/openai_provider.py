@@ -68,7 +68,7 @@ def _tool_loop(
         messages.append(
             msg.model_dump() if hasattr(msg, "model_dump") else {"role": "assistant", "content": msg.content}
         )
-        from agent_platform.policy.tools import ToolPolicyError
+        from agent_platform.infra.guardrail.tools import ToolPolicyError
 
         for tc in tool_calls:
             try:

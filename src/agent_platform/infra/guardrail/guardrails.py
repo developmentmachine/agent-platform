@@ -12,9 +12,9 @@ import re
 from typing import Any, Dict, List, Optional
 
 from agent_platform.domain.models import FeedbackRequest, GenerateRequest, Recap
-from agent_platform.policy.output_rules import RuleSet, Violation, apply_rules, load_ruleset
+from agent_platform.infra.guardrail.output_rules import RuleSet, Violation, apply_rules, load_ruleset
 
-logger = logging.getLogger("agent_platform.policy.guardrails")
+logger = logging.getLogger("agent_platform.infra.guardrail.guardrails")
 
 _DEFAULT_RECAP_DISCLAIMER = (
     "本内容仅供参考，不构成投资建议。投资有风险，入市需谨慎。"

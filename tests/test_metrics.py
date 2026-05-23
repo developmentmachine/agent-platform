@@ -37,7 +37,7 @@ from agent_platform.runtime.observability.metrics import (
     record_recap_run,
     reset_default_metrics,
 )
-from agent_platform.policy.tools import (
+from agent_platform.infra.guardrail.tools import (
     ToolDisabled,
     ToolPolicy,
     ToolPolicyRegistry,

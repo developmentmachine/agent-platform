@@ -6,7 +6,7 @@ import pytest
 from agent_platform.config.settings import Settings
 from agent_platform.core.ports.mcp_tool import McpClientPort, McpToolDescriptor, McpToolResult
 from agent_platform.infra.mcp_client.inproc import InProcessMcpClient
-from agent_platform.policy.tools import ToolDisabled, ToolPolicy, ToolPolicyRegistry
+from agent_platform.infra.guardrail.tools import ToolDisabled, ToolPolicy, ToolPolicyRegistry
 from agent_platform.runtime.mcp_gateway import McpToolGateway
 from agent_platform.tools_server.registry import (
     ToolRegistry,

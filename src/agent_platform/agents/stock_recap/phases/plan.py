@@ -8,7 +8,7 @@ from agent_platform.agents.stock_recap.phases._helpers import span_phase
 from agent_platform.agents.stock_recap.phases.base import RecapPhase
 from agent_platform.agents.stock_recap.recap_state import RecapAgentRunState
 from agent_platform.agents.stock_recap.state import RecapRunState
-from agent_platform.policy.guardrails import clamp_llm_messages
+from agent_platform.infra.guardrail.guardrails import clamp_llm_messages
 
 
 def run(state: RecapAgentRunState, tracer: Any) -> None:

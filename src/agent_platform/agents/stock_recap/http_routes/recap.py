@@ -17,7 +17,7 @@ from agent_platform.domain.models import GenerateRequest, GenerateResponse
 from agent_platform.domain.run_context import RunContext
 from agent_platform.infra.persistence.db import init_db
 from agent_platform.adapters.http.api.deps import require_api_key, require_rate_limit
-from agent_platform.policy.guardrails import GuardrailError, validate_generate_request
+from agent_platform.infra.guardrail.guardrails import GuardrailError, validate_generate_request
 
 router = APIRouter(tags=["recap"])
 

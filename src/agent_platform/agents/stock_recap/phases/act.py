@@ -11,7 +11,7 @@ from agent_platform.agents.stock_recap.render import render_markdown, render_wec
 from agent_platform.agents.stock_recap.state import RecapRunState
 from agent_platform.domain.models import LlmBudgetExceeded, LlmBusinessError
 from agent_platform.infra.llm.backends import call_llm
-from agent_platform.policy.guardrails import coerce_recap_output
+from agent_platform.infra.guardrail.guardrails import coerce_recap_output
 
 logger = logging.getLogger("agent_platform.agents.stock_recap.phases.act")
 

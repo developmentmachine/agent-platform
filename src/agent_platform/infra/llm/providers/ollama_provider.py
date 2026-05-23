@@ -56,7 +56,7 @@ def _tool_loop(
         messages.append(
             {"role": "assistant", "content": msg.get("content", ""), "tool_calls": tool_calls}
         )
-        from agent_platform.policy.tools import ToolPolicyError
+        from agent_platform.infra.guardrail.tools import ToolPolicyError
 
         for tc in tool_calls:
             fn = tc.get("function") or {}

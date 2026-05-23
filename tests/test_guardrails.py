@@ -7,7 +7,7 @@ from agent_platform.domain.models import (
     RecapDailySection,
     RecapStrategy,
 )
-from agent_platform.policy.guardrails import (
+from agent_platform.infra.guardrail.guardrails import (
     GuardrailError,
     coerce_recap_output,
     validate_feedback_request,

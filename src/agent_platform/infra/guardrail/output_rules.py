@@ -25,7 +25,7 @@ import yaml
 
 from agent_platform.domain.models import Recap, RecapDaily, RecapStrategy
 
-logger = logging.getLogger("agent_platform.policy.output_rules")
+logger = logging.getLogger("agent_platform.infra.guardrail.output_rules")
 
 Severity = Literal["low", "medium", "high"]
 Action = Literal["redact", "warn"]
