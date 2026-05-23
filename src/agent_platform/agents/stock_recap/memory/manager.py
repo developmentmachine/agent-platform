@@ -150,7 +150,7 @@ def _current_tenant_id() -> Optional[str]:
     单租户 / CLI / 周期任务保持 None 行为兼容；HTTP 请求经过 ``require_api_key`` 后会有值。
     """
     try:
-        from agent_platform.observability.runtime_context import current_run_context
+        from agent_platform.runtime.observability.runtime_context import current_run_context
 
         ctx = current_run_context.get()
         if ctx is not None:

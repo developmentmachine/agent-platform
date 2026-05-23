@@ -32,7 +32,7 @@ from agent_platform.infra.persistence.db import (
     mark_pending_action_done,
     mark_pending_action_failed,
 )
-from agent_platform.observability.metrics import record_outbox_action
+from agent_platform.runtime.observability.metrics import record_outbox_action
 
 logger = logging.getLogger("agent_platform.side_effects.outbox")
 
@@ -89,7 +89,7 @@ def get_registered_handlers() -> Dict[str, ActionHandler]:
 def _resolve_tenant_id() -> Optional[str]:
     """Outbox 入队时显式没传就从 ``current_run_context`` / ``current_principal`` 推断。"""
     try:
-        from agent_platform.observability.runtime_context import current_run_context
+        from agent_platform.runtime.observability.runtime_context import current_run_context
 
         ctx = current_run_context.get()
         if ctx is not None and getattr(ctx, "tenant_id", None):

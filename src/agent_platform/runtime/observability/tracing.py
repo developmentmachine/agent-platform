@@ -10,7 +10,7 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 
-logger = logging.getLogger("agent_platform.observability.tracing")
+logger = logging.getLogger("agent_platform.runtime.observability.tracing")
 
 _configured: bool = False
 

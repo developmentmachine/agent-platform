@@ -18,13 +18,13 @@ from typing import Any, Dict
 import pytest
 
 from agent_platform.domain.run_context import RunContext
-from agent_platform.observability.logging_setup import (
+from agent_platform.runtime.observability.logging_setup import (
     JsonFormatter,
     RunContextFilter,
     reset_structured_logging,
     setup_structured_logging,
 )
-from agent_platform.observability.runtime_context import current_run_context
+from agent_platform.runtime.observability.runtime_context import current_run_context
 
 
 @pytest.fixture

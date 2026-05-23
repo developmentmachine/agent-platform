@@ -94,12 +94,9 @@ forbidden_modules = [
     "agent_platform.interfaces",
     "agent_platform.presentation",
 ]
-# 例外：core.runtime / core.orchestration 暂从 ``observability`` 与
-# ``application.orchestration.budget`` re-export，待物理迁移后取消此例外。
+# 例外：core.runtime.contextvars 需读取 runtime.observability 的 ContextVar 槽位。
 ignore_imports = [
-    "agent_platform.core.runtime.contextvars -> agent_platform.observability.runtime_context",
-    "agent_platform.core.runtime.budget -> agent_platform.application.orchestration.budget",
-    "agent_platform.core.runtime.run_context -> agent_platform.domain.run_context",
+    "agent_platform.core.runtime.contextvars -> agent_platform.runtime.observability.runtime_context",
 ]
 
 [[tool.importlinter.contracts]]

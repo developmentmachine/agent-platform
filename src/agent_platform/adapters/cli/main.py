@@ -21,7 +21,7 @@ from agent_platform.infra.persistence.db import init_db
 
 
 def _setup_logger(level: str) -> logging.Logger:
-    from agent_platform.observability.logging_setup import setup_structured_logging
+    from agent_platform.runtime.observability.logging_setup import setup_structured_logging
 
     setup_structured_logging(
         level=getattr(logging, level.upper(), logging.INFO),
@@ -87,7 +87,7 @@ def cli_main() -> int:
 
     if args.mcp_tools:
         from agent_platform.adapters.mcp_stdio.main import run_mcp_stdio
-        from agent_platform.observability.tracing import configure_tracing
+        from agent_platform.runtime.observability.tracing import configure_tracing
 
         configure_tracing(settings)
         init_db(settings.db_path)
@@ -99,7 +99,7 @@ def cli_main() -> int:
         return 1
 
     _setup_logger(settings.log_level)
-    from agent_platform.observability.tracing import configure_tracing
+    from agent_platform.runtime.observability.tracing import configure_tracing
 
     configure_tracing(settings)
     init_db(settings.db_path)

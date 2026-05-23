@@ -26,7 +26,7 @@ from agent_platform.domain.models import (
     Recap,
 )
 from agent_platform.domain.run_context import RunContext
-from agent_platform.observability.runtime_context import current_budget
+from agent_platform.runtime.observability.runtime_context import current_budget
 
 
 _ENV_KEYS = {

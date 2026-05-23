@@ -10,12 +10,10 @@
 from __future__ import annotations
 
 import contextvars
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
-from agent_platform.domain.run_context import RunContext
-
-if TYPE_CHECKING:
-    from agent_platform.application.orchestration.budget import AgentBudget
+from agent_platform.core.runtime.budget import AgentBudget
+from agent_platform.core.runtime.run_context import RunContext
 
 current_run_context: contextvars.ContextVar[Optional[RunContext]] = contextvars.ContextVar(
     "agent_platform_run_context",

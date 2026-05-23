@@ -15,7 +15,7 @@ from agent_platform.infra.persistence.db import (
 )
 from agent_platform.core.ports.mcp_tool import McpToolResult
 from agent_platform.infra.tools.runner import RecapToolRunner
-from agent_platform.observability.runtime_context import (
+from agent_platform.runtime.observability.runtime_context import (
     current_budget,
     current_run_context,
 )

@@ -30,7 +30,7 @@ from agent_platform.infra.llm.backends import call_llm
 from agent_platform.infra.llm.providers import register_provider
 from agent_platform.infra.persistence.db import init_db
 from agent_platform.infra.tools.runner import RecapToolRunner
-from agent_platform.observability.metrics import (
+from agent_platform.runtime.observability.metrics import (
     get_metrics,
     record_outbox_action,
     record_phase_duration,

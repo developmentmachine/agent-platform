@@ -9,7 +9,7 @@ import contextvars
 from typing import Optional
 
 from agent_platform.core.runtime.principal import PrincipalContext
-from agent_platform.observability.runtime_context import (  # noqa: F401
+from agent_platform.runtime.observability.runtime_context import (  # noqa: F401
     current_budget,
     current_run_context,
 )

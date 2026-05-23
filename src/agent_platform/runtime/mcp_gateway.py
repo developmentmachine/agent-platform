@@ -506,7 +506,7 @@ class McpToolGateway:
         error: Optional[str],
         tenant_id: Optional[str] = None,
     ) -> None:
-        from agent_platform.observability.metrics import record_tool_invocation
+        from agent_platform.runtime.observability.metrics import record_tool_invocation
 
         record_tool_invocation(tool_name, status)
         if not self._settings.tool_audit_enabled:

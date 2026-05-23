@@ -1,7 +1,7 @@
 """平台运行时上下文类型（与具体编排无关）。
 
-为保兼容，``RunContext`` 与 ``AgentBudget`` 仍从原 ``domain.run_context`` /
-``application.orchestration.budget`` 处 re-export；新增的 ``PrincipalContext`` /
+``RunContext`` / ``AgentBudget`` 的规范实现位于本子包；旧路径 ``domain.run_context``、
+``application.orchestration.budget`` 为 shim。新增的 ``PrincipalContext`` /
 ``SessionContext`` / ``ContextVars`` 则首次定义在本子包。
 """
 from agent_platform.core.runtime.run_context import RunContext

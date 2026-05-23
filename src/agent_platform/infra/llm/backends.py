@@ -79,8 +79,8 @@ def call_llm(
     date: str = "",
 ) -> Tuple[Recap, LlmTokens]:
     """选择 provider → 落入 ``llm.call`` span → 执行。重试策略 tenacity 包裹。"""
-    from agent_platform.observability.runtime_context import current_run_context
-    from agent_platform.observability.tracing import get_tracer
+    from agent_platform.runtime.observability.runtime_context import current_run_context
+    from agent_platform.runtime.observability.tracing import get_tracer
 
     backend = llm_backend_effective(model_spec, settings)
     model = model_effective(settings, model_spec)
@@ -109,7 +109,7 @@ def call_llm(
         span_attrs["recap.request_id"] = ctx.request_id
         span_attrs["recap.trace_id"] = ctx.trace_id
 
-    from agent_platform.observability.metrics import record_llm_call, record_llm_tokens
+    from agent_platform.runtime.observability.metrics import record_llm_call, record_llm_tokens
 
     with tracer.start_as_current_span("llm.call", attributes=span_attrs):
         provider = resolve_provider(backend)

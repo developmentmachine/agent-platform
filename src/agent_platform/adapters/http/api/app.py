@@ -23,8 +23,8 @@ from agent_platform.adapters.http.api.v1 import jobs_router, ops_router
 async def _app_lifespan(_app: FastAPI) -> AsyncIterator[None]:
     import logging
 
-    from agent_platform.observability.logging_setup import setup_structured_logging
-    from agent_platform.observability.tracing import configure_tracing
+    from agent_platform.runtime.observability.logging_setup import setup_structured_logging
+    from agent_platform.runtime.observability.tracing import configure_tracing
 
     setup_structured_logging(level=logging.INFO)
     configure_tracing(get_settings())

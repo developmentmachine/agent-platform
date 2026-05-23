@@ -16,7 +16,7 @@ from agent_platform.domain.models import (
     RecapStrategy,
 )
 from agent_platform.agents.stock_recap.llm.parse import _stable_json, parse_and_validate
-from agent_platform.observability.runtime_context import current_budget
+from agent_platform.runtime.observability.runtime_context import current_budget
 
 logger = logging.getLogger("agent_platform.infra.llm.providers.openai")
 

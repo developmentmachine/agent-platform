@@ -21,7 +21,7 @@ import sys
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from agent_platform.observability.runtime_context import current_run_context
+from agent_platform.runtime.observability.runtime_context import current_run_context
 
 
 _STD_LOGRECORD_ATTRS = {

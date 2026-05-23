@@ -38,7 +38,7 @@ from agent_platform.infra.persistence.db import (
     mark_job_failed,
     update_job_running,
 )
-from agent_platform.observability.runtime_context import current_run_context
+from agent_platform.runtime.observability.runtime_context import current_run_context
 
 logger = logging.getLogger("agent_platform.application.jobs")
 

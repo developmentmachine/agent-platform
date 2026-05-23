@@ -50,8 +50,8 @@ def execute_tool(name: str, arguments: Dict[str, Any], db_path: str = ":memory:"
 
     db_path 参数保留只为旧调用方兼容；``query_history`` handler 自行从环境变量解析。
     """
-    from agent_platform.observability.runtime_context import current_run_context
-    from agent_platform.observability.tracing import get_tracer
+    from agent_platform.runtime.observability.runtime_context import current_run_context
+    from agent_platform.runtime.observability.tracing import get_tracer
 
     logger.info("tool_call name=%s args=%s", name, arguments)
     ctx = current_run_context.get()

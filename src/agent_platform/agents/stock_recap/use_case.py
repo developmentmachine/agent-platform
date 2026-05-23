@@ -20,8 +20,8 @@ from agent_platform.application.side_effects import run_deferred_post_recap, try
 from agent_platform.config.settings import Settings
 from agent_platform.domain.models import GenerateRequest, GenerateResponse
 from agent_platform.domain.run_context import RunContext
-from agent_platform.observability.runtime_context import current_budget, current_run_context
-from agent_platform.observability.tracing import configure_tracing, get_tracer
+from agent_platform.runtime.observability.runtime_context import current_budget, current_run_context
+from agent_platform.runtime.observability.tracing import configure_tracing, get_tracer
 from agent_platform.policy.guardrails import validate_generate_request
 
 
