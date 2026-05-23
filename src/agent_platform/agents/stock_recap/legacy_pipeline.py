@@ -24,7 +24,7 @@ from agent_platform.agents.stock_recap.phases import (
 )
 from agent_platform.agents.stock_recap.phases._helpers import stable_json, utc_now_iso
 from agent_platform.agents.stock_recap.recap_state import RecapAgentRunState
-from agent_platform.domain.models import GenerateResponse, LlmBudgetExceeded
+from agent_platform.core.domain.models import GenerateResponse, LlmBudgetExceeded
 from agent_platform.infra.llm.backends import model_effective
 from agent_platform.runtime.observability.metrics import record_phase_duration, record_recap_run
 from agent_platform.runtime.observability.tracing import get_tracer

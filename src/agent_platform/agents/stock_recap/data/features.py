@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict
 
-from agent_platform.domain.models import Features, MarketSnapshot
+from agent_platform.core.domain.models import Features, MarketSnapshot
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:

@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 import agent_platform.config.settings as settings_module
 import agent_platform.infra.persistence.db as db_module
 from agent_platform.config.settings import Settings
-from agent_platform.domain.models import (
+from agent_platform.core.domain.models import (
     Features,
     LlmTokens,
     MarketSnapshot,

@@ -9,8 +9,8 @@ from __future__ import annotations
 from typing import Optional, Tuple
 
 from agent_platform.config.settings import Settings
-from agent_platform.domain.models import LlmBackend
-from agent_platform.domain.registries import default_backend_registry
+from agent_platform.core.domain.models import LlmBackend
+from agent_platform.core.domain.registries import default_backend_registry
 
 
 def _model_prefix_to_backend(prefix: str) -> Optional[LlmBackend]:

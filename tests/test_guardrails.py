@@ -1,6 +1,6 @@
 import pytest
 
-from agent_platform.domain.models import (
+from agent_platform.core.domain.models import (
     FeedbackRequest,
     GenerateRequest,
     RecapDaily,

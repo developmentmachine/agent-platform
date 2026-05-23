@@ -16,7 +16,7 @@ import pytest
 
 from agent_platform.agents.stock_recap.use_case import generate_once
 from agent_platform.config.settings import Settings
-from agent_platform.domain.models import (
+from agent_platform.core.domain.models import (
     GenerateRequest,
     LlmTokens,
     RecapDaily,

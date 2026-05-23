@@ -7,7 +7,7 @@ import pytest
 
 from agent_platform.agents.stock_recap.effects import push as push_mod
 from agent_platform.config.settings import Settings
-from agent_platform.domain.models import RecapDaily, RecapDailySection
+from agent_platform.core.domain.models import RecapDaily, RecapDailySection
 from agent_platform.infra.persistence.db import get_push_log, init_db
 
 

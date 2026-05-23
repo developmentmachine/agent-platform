@@ -6,7 +6,7 @@ from typing import Optional
 
 from agent_platform.agents.stock_recap.use_case import generate_once
 from agent_platform.config.settings import Settings
-from agent_platform.domain.models import GenerateRequest, GenerateResponse
+from agent_platform.core.domain.models import GenerateRequest, GenerateResponse
 from agent_platform.domain.run_context import RunContext
 
 

@@ -11,7 +11,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional
 
-from agent_platform.domain.models import FeedbackRequest, GenerateRequest, Recap
+from agent_platform.core.domain.models import FeedbackRequest, GenerateRequest, Recap
 from agent_platform.infra.guardrail.output_rules import RuleSet, Violation, apply_rules, load_ruleset
 
 logger = logging.getLogger("agent_platform.infra.guardrail.guardrails")

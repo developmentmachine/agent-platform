@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import yaml
 
-from agent_platform.domain.models import Recap, RecapDaily, RecapStrategy
+from agent_platform.core.domain.models import Recap, RecapDaily, RecapStrategy
 
 logger = logging.getLogger("agent_platform.infra.guardrail.output_rules")
 

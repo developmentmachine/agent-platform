@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Optional, Set
 
-from agent_platform.domain.models import Features, MarketSnapshot, Mode, RecapDaily, RecapStrategy
+from agent_platform.core.domain.models import Features, MarketSnapshot, Mode, RecapDaily, RecapStrategy
 from agent_platform.resources.prompts.loader import (
     PROMPT_BASE_VERSION,
     json_output_instruction,

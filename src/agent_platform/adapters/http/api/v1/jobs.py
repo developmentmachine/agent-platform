@@ -20,7 +20,7 @@ from agent_platform.application.jobs import (
     submit_recap_job,
 )
 from agent_platform.config.settings import Settings, get_settings
-from agent_platform.domain.models import GenerateRequest
+from agent_platform.core.domain.models import GenerateRequest
 from agent_platform.domain.principal import PrincipalContext
 from agent_platform.infra.persistence.db import init_db
 from agent_platform.adapters.http.api.deps import require_api_key, require_rate_limit

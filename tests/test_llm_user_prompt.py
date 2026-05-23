@@ -1,6 +1,6 @@
 import json
 
-from agent_platform.domain.models import Features, MarketSnapshot
+from agent_platform.core.domain.models import Features, MarketSnapshot
 from agent_platform.agents.stock_recap.llm.prompts import build_user_prompt
 
 

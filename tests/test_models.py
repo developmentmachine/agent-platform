@@ -2,7 +2,7 @@
 import pytest
 from pydantic import ValidationError
 
-from agent_platform.domain.models import (
+from agent_platform.core.domain.models import (
     RecapDaily,
     RecapDailySection,
     RecapStrategy,

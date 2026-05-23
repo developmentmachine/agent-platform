@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Tuple
 import pytest
 
 from agent_platform.config.settings import Settings
-from agent_platform.domain.models import (
+from agent_platform.core.domain.models import (
     LlmBudgetExceeded,
     LlmBusinessError,
     LlmError,

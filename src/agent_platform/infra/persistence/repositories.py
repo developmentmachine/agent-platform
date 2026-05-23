@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from agent_platform.domain.models import (
+from agent_platform.core.domain.models import (
     BacktestResult,
     EvolutionNote,
     Features,
@@ -23,7 +23,7 @@ from agent_platform.domain.models import (
     MarketSnapshot,
     Recap,
 )
-from agent_platform.domain.repositories import (
+from agent_platform.core.domain.repositories import (
     BacktestRepository,
     EvolutionRepository,
     ExperimentRepository,

@@ -28,7 +28,7 @@ from agent_platform.core.registry.agent_registry import AgentRegistry
 from agent_platform.core.runtime.principal import PrincipalContext
 from agent_platform.core.runtime.run_context import RunContext
 from agent_platform.core.runtime.session import SessionContext
-from agent_platform.domain.models import GenerateRequest, GenerateResponse
+from agent_platform.core.domain.models import GenerateRequest, GenerateResponse
 
 logger = logging.getLogger("agent_platform.agents.stock_recap.manifest")
 

@@ -19,7 +19,7 @@ from agent_platform.application.orchestration.budget import AgentBudget
 from agent_platform.agents.stock_recap.recap_state import RecapAgentRunState
 from agent_platform.agents.stock_recap.legacy_pipeline import _check_budget_between_phases
 from agent_platform.config.settings import Settings
-from agent_platform.domain.models import (
+from agent_platform.core.domain.models import (
     GenerateRequest,
     LlmBudgetExceeded,
     LlmTokens,
@@ -154,7 +154,7 @@ def test_act_phase_handles_budget_exceeded_gracefully(monkeypatch: pytest.Monkey
     )
 
     # 给 act 喂上必要的前置状态
-    from agent_platform.domain.models import Features, MarketSnapshot
+    from agent_platform.core.domain.models import Features, MarketSnapshot
 
     state.snapshot = MarketSnapshot(
         asof="2024-01-02T00:00:00+00:00", provider="mock", date="2024-01-02"

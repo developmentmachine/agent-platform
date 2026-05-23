@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
-from agent_platform.domain.models import (
+from agent_platform.core.domain.models import (
     BacktestResult,
     Features,
     MarketSnapshot,

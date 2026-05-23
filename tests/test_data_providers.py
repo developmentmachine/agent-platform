@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from agent_platform.domain.data_providers import DataProviderSpec
-from agent_platform.domain.models import MarketSnapshot
+from agent_platform.core.domain.data_providers import DataProviderSpec
+from agent_platform.core.domain.models import MarketSnapshot
 from agent_platform.agents.stock_recap.data.collector import (
     collect_snapshot,
     default_data_provider_registry,

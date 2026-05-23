@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Dict, List, Protocol, Tuple, runtime_checkable
 
 from agent_platform.config.settings import Settings
-from agent_platform.domain.models import LlmTokens, Mode, Recap
+from agent_platform.core.domain.models import LlmTokens, Mode, Recap
 
 
 @runtime_checkable

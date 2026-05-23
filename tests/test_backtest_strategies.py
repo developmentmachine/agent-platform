@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from agent_platform.application.backtest.registry import resolve_backtest_strategy
-from agent_platform.domain.models import MarketSnapshot, RecapStrategy
+from agent_platform.core.domain.models import MarketSnapshot, RecapStrategy
 
 
 def test_normalized_overlap_handles_compound_mainline():

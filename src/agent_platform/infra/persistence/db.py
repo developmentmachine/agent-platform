@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, Generator, List, Optional, Tuple
 
-from agent_platform.domain.models import (
+from agent_platform.core.domain.models import (
     BacktestResult,
     EvolutionNote,
     Features,

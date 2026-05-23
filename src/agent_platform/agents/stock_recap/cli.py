@@ -19,7 +19,7 @@ from agent_platform.agents.stock_recap.memory.manager import (
 )
 from agent_platform.agents.stock_recap.use_case import _try_run_backtest, generate_once
 from agent_platform.config.settings import Settings
-from agent_platform.domain.models import GenerateRequest
+from agent_platform.core.domain.models import GenerateRequest
 from agent_platform.agents.stock_recap.data.collector import collect_snapshot
 from agent_platform.agents.stock_recap.data.features import build_features
 from agent_platform.infra.llm.backends import llm_backend_effective, model_effective

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Dict
 
-from agent_platform.domain.backtest_strategy import BacktestStrategy
+from agent_platform.core.domain.backtest_strategy import BacktestStrategy
 
 _REGISTRY: Dict[str, BacktestStrategy] = {}
 

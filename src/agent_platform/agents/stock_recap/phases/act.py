@@ -9,7 +9,7 @@ from agent_platform.agents.stock_recap.phases.base import RecapPhase
 from agent_platform.agents.stock_recap.recap_state import RecapAgentRunState
 from agent_platform.agents.stock_recap.render import render_markdown, render_wechat_text
 from agent_platform.agents.stock_recap.state import RecapRunState
-from agent_platform.domain.models import LlmBudgetExceeded, LlmBusinessError
+from agent_platform.core.domain.models import LlmBudgetExceeded, LlmBusinessError
 from agent_platform.infra.llm.backends import call_llm
 from agent_platform.infra.guardrail.guardrails import coerce_recap_output
 

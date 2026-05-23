@@ -13,7 +13,7 @@ import pytest
 from agent_platform.agents.stock_recap import legacy_pipeline as pipeline_mod
 from agent_platform.agents.stock_recap.recap_state import RecapAgentRunState
 from agent_platform.config.settings import Settings
-from agent_platform.domain.models import (
+from agent_platform.core.domain.models import (
     Features,
     GenerateRequest,
     LlmSchemaError,

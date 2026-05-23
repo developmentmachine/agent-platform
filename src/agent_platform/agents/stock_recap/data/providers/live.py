@@ -29,7 +29,7 @@ from agent_platform.agents.stock_recap.data.sources.hot_rank import make_hot_ran
 from agent_platform.agents.stock_recap.data.sources.market_fund_flow import (
     fetch_market_main_fund_summary,
 )
-from agent_platform.domain.models import MarketSnapshot
+from agent_platform.core.domain.models import MarketSnapshot
 
 logger = logging.getLogger("agent_platform.providers.live")
 

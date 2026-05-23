@@ -1,57 +1,15 @@
-"""领域模型与值对象（无 I/O、无框架依赖）。"""
+"""Backward-compat shim → ``agent_platform.core.domain`` + principal/run_context。"""
+from __future__ import annotations
 
-from agent_platform.domain.backtest_strategy import BacktestStrategy
-from agent_platform.domain.data_providers import (
-    DataProviderRegistry,
-    DataProviderSpec,
-)
-from agent_platform.domain.run_context import RunContext
-from agent_platform.domain.models import (
-    BacktestResult,
-    DailyMarketEvent,
-    EvolutionNote,
-    Features,
-    FeedbackRequest,
-    GenerateRequest,
-    GenerateResponse,
-    HighlightedSector,
-    LlmBackend,
-    LlmError,
-    LlmTokens,
-    MarketSnapshot,
-    MetricsSnapshot,
-    Mode,
-    NamedIndexRef,
-    Provider,
-    Recap,
-    RecapDaily,
-    RecapDailySection,
-    RecapStrategy,
-)
+from agent_platform.core.domain import *  # noqa: F403
+from agent_platform.core.domain import __all__ as _core_all
+from agent_platform.core.runtime.run_context import RunContext
+from agent_platform.domain.principal import PrincipalContext, current_principal, get_principal, set_principal
 
-__all__ = [
-    "BacktestStrategy",
-    "DataProviderRegistry",
-    "DataProviderSpec",
+__all__ = list(_core_all) + [
     "RunContext",
-    "BacktestResult",
-    "DailyMarketEvent",
-    "EvolutionNote",
-    "Features",
-    "FeedbackRequest",
-    "GenerateRequest",
-    "GenerateResponse",
-    "HighlightedSector",
-    "LlmBackend",
-    "LlmError",
-    "LlmTokens",
-    "MarketSnapshot",
-    "MetricsSnapshot",
-    "Mode",
-    "NamedIndexRef",
-    "Provider",
-    "Recap",
-    "RecapDaily",
-    "RecapDailySection",
-    "RecapStrategy",
+    "PrincipalContext",
+    "current_principal",
+    "get_principal",
+    "set_principal",
 ]

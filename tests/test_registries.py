@@ -5,12 +5,12 @@ from typing import Type
 
 import pytest
 
-from agent_platform.domain.models import (
+from agent_platform.core.domain.models import (
     Recap,
     RecapDaily,
     RecapStrategy,
 )
-from agent_platform.domain.registries import (
+from agent_platform.core.domain.registries import (
     LlmBackendRegistry,
     LlmBackendSpec,
     ModeRegistry,
@@ -55,7 +55,7 @@ def test_mode_registry_register_unknown_then_use() -> None:
 
 def test_parse_and_validate_uses_mode_registry_for_unknown_mode() -> None:
     """未知 mode 应落入 LlmSchemaError，由上层 critic / pipeline 决定如何处理。"""
-    from agent_platform.domain.models import LlmSchemaError
+    from agent_platform.core.domain.models import LlmSchemaError
 
     payload = '{"mode": "ghost", "date": "2024-01-02"}'
     with pytest.raises(LlmSchemaError):

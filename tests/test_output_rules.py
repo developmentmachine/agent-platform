@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_platform.domain.models import (
+from agent_platform.core.domain.models import (
     RecapDaily,
     RecapDailySection,
     RecapStrategy,

@@ -5,7 +5,7 @@ import json
 import logging
 from typing import Any
 
-from agent_platform.domain.models import (
+from agent_platform.core.domain.models import (
     LlmError,
     LlmParseError,
     LlmSchemaError,
@@ -14,7 +14,7 @@ from agent_platform.domain.models import (
     RecapDaily,
     RecapStrategy,
 )
-from agent_platform.domain.registries import ModeRegistry, default_mode_registry
+from agent_platform.core.domain.registries import ModeRegistry, default_mode_registry
 
 logger = logging.getLogger("agent_platform.agents.stock_recap.llm.parse")
 

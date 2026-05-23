@@ -6,7 +6,7 @@ import logging
 from typing import Any, Dict, List, Tuple
 
 from agent_platform.config.settings import Settings
-from agent_platform.domain.models import (
+from agent_platform.core.domain.models import (
     LlmError,
     LlmTokens,
     LlmTransportError,

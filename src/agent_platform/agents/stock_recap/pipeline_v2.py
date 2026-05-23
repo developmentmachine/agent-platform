@@ -28,7 +28,7 @@ from agent_platform.agents.stock_recap.legacy_pipeline import (
     _record_run_outcome,
     _run_phase_with_metrics,
 )
-from agent_platform.domain.models import GenerateResponse
+from agent_platform.core.domain.models import GenerateResponse
 from agent_platform.runtime.observability.tracing import get_tracer
 
 logger = logging.getLogger("agent_platform.agents.stock_recap.pipeline_v2")

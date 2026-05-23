@@ -8,7 +8,7 @@ import pytest
 
 from agent_platform.application.orchestration.budget import AgentBudget
 from agent_platform.config.settings import Settings
-from agent_platform.domain.models import LlmBudgetExceeded
+from agent_platform.core.domain.models import LlmBudgetExceeded
 from agent_platform.infra.persistence.db import (
     init_db,
     load_recent_tool_invocations,

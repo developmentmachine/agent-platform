@@ -150,7 +150,7 @@ class MyAgentOutput(BaseModel):
 若新 Agent 需要外部数据，在此实现采集逻辑。实现 `domain/data_providers.py` 中定义的协议接口，以便可以注入 mock 数据用于测试：
 
 ```python
-from agent_platform.domain.data_providers import SomeDataProtocol
+from agent_platform.core.domain.data_providers import SomeDataProtocol
 
 class MyDataSource:
     def fetch(self) -> dict:

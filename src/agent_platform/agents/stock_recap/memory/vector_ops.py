@@ -6,7 +6,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from agent_platform.config.settings import Settings
-from agent_platform.domain.models import Features, MarketSnapshot, Mode, Recap, RecapDaily, RecapStrategy
+from agent_platform.core.domain.models import Features, MarketSnapshot, Mode, Recap, RecapDaily, RecapStrategy
 from agent_platform.infra.memory.embeddings_openai import OpenAIEmbeddingProvider
 from agent_platform.infra.memory.qdrant_store import QdrantVectorStore
 

@@ -4,8 +4,8 @@ from typing import Dict, List, Tuple
 import pytest
 
 from agent_platform.config.settings import Settings
-from agent_platform.domain.models import LlmError, LlmTokens, RecapDaily, RecapDailySection
-from agent_platform.domain.registries import (
+from agent_platform.core.domain.models import LlmError, LlmTokens, RecapDaily, RecapDailySection
+from agent_platform.core.domain.registries import (
     LlmBackendSpec,
     default_backend_registry,
     reset_default_backend_registry,

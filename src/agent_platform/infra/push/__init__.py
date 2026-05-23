@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from agent_platform.domain.models import Recap
+from agent_platform.core.domain.models import Recap
 
 
 class PushProvider(ABC):

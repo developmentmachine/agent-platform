@@ -5,7 +5,7 @@ import time
 from dataclasses import dataclass, field
 
 from agent_platform.config.settings import Settings
-from agent_platform.domain.models import LlmBudgetExceeded
+from agent_platform.core.domain.models import LlmBudgetExceeded
 
 
 @dataclass

@@ -235,7 +235,7 @@ def test_pipeline_persists_experiment_id_and_variant(tmp_path, monkeypatch):
     )
 
     from agent_platform.agents.stock_recap.use_case import generate_once
-    from agent_platform.domain.models import GenerateRequest
+    from agent_platform.core.domain.models import GenerateRequest
 
     req = GenerateRequest(
         mode="daily",
@@ -279,7 +279,7 @@ def test_pipeline_no_experiment_keeps_global_prompt_version(tmp_path, monkeypatc
     init_db(settings.db_path)
 
     from agent_platform.agents.stock_recap.use_case import generate_once
-    from agent_platform.domain.models import GenerateRequest
+    from agent_platform.core.domain.models import GenerateRequest
 
     req = GenerateRequest(
         mode="daily", provider="mock", force_llm=False, skip_trading_check=True

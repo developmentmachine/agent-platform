@@ -33,7 +33,7 @@ from agent_platform.infra.persistence.db import (
     set_active_prompt_version,
 )
 from agent_platform.agents.stock_recap.llm.prompts import PROMPT_BASE_VERSION, pattern_extraction_system
-from agent_platform.domain.models import EvolutionNote, Features, MarketSnapshot, Mode
+from agent_platform.core.domain.models import EvolutionNote, Features, MarketSnapshot, Mode
 
 logger = logging.getLogger("agent_platform.memory")
 

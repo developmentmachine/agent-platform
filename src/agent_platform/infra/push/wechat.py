@@ -12,7 +12,7 @@ from typing import Any, Optional
 
 import httpx
 
-from agent_platform.domain.models import Recap
+from agent_platform.core.domain.models import Recap
 from agent_platform.infra.push import PushProvider
 from agent_platform.agents.stock_recap.render import render_markdown_for_wechat_work, render_wechat_text
 

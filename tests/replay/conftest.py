@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from agent_platform.domain.registries import (
+from agent_platform.core.domain.registries import (
     LlmBackendSpec,
     default_backend_registry,
 )

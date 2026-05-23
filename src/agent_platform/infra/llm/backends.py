@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential_jitter
 
 from agent_platform.config.settings import Settings
-from agent_platform.domain.models import (
+from agent_platform.core.domain.models import (
     Features,
     LlmBackend,
     LlmBudgetExceeded,

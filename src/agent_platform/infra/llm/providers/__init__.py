@@ -16,8 +16,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from agent_platform.domain.models import LlmError
-from agent_platform.domain.registries import LlmBackendRegistry, default_backend_registry
+from agent_platform.core.domain.models import LlmError
+from agent_platform.core.domain.registries import LlmBackendRegistry, default_backend_registry
 
 from agent_platform.infra.llm.providers.base import LlmProvider
 from agent_platform.infra.llm.providers.openai_provider import OpenAiProvider

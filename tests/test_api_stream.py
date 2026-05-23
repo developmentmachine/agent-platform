@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import agent_platform.config.settings as settings_module
-from agent_platform.domain.models import GenerateRequest
+from agent_platform.core.domain.models import GenerateRequest
 from agent_platform.adapters.http.api.routes import app
 
 

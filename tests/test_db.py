@@ -9,7 +9,7 @@ from agent_platform.infra.persistence.db import (
     insert_feedback,
     load_feedback_summary,
 )
-from agent_platform.domain.models import (
+from agent_platform.core.domain.models import (
     Features,
     LlmTokens,
     MarketSnapshot,

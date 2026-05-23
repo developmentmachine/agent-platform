@@ -5,7 +5,7 @@ import html
 import re
 from datetime import datetime
 
-from agent_platform.domain.models import Recap, RecapDaily, RecapStrategy
+from agent_platform.core.domain.models import Recap, RecapDaily, RecapStrategy
 
 _BENCHMARK_RE = re.compile(r"^【复盘基准日：.+】\s*$")
 
