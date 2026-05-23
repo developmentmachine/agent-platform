@@ -27,8 +27,8 @@ from typing import Any, Dict, Optional
 from agent_platform.agents.stock_recap.use_case import generate_once
 from agent_platform.config.settings import Settings
 from agent_platform.core.domain.models import GenerateRequest
-from agent_platform.domain.principal import PrincipalContext, get_principal
-from agent_platform.domain.run_context import RunContext
+from agent_platform.core.runtime.principal import PrincipalContext, get_principal
+from agent_platform.core.runtime.run_context import RunContext
 from agent_platform.infra.persistence.db import (
     insert_job,
     list_jobs,
@@ -168,13 +168,15 @@ def run_recap_job(
 
     # 让 worker 内的日志 / 工具 / 持久化读到正确的 principal + RunContext；
     # 结束后必须 reset principal，避免 BackgroundTasks 污染后续 HTTP 请求。
-    from agent_platform.domain.principal import current_principal, set_principal
+    from agent_platform.core.runtime.principal import current_principal, set_principal
 
+    tid = job.get("tenant_id")
     effective_principal = principal or PrincipalContext(
-        tenant_id=job.get("tenant_id"),
+        subject=str(tid) if tid else "scheduler",
+        source="job-worker",
+        tenant_id=tid,
         role=settings.principal_role,
         api_key_hash=None,
-        source="job-worker",
     )
     principal_token = set_principal(effective_principal)
 

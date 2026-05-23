@@ -56,18 +56,9 @@ _SETTINGS_TOOL_FLAGS: Dict[str, str] = {
 
 
 def _resolve_principal_role(settings: Settings) -> str:
-    """优先使用 ``current_principal.role``（W1 新增）；其次 ``domain.principal``；
-    最后回落 ``Settings.principal_role``，与历史行为一致。"""
+    """``current_principal.role`` → ``Settings.principal_role``。"""
     try:
-        from agent_platform.core.runtime.contextvars import current_principal
-
-        principal = current_principal.get()
-        if principal is not None and (principal.role or "").strip():
-            return principal.role
-    except Exception:
-        pass
-    try:
-        from agent_platform.domain.principal import get_principal
+        from agent_platform.core.runtime.principal import get_principal
 
         role = (get_principal().role or "").strip()
         if role:
@@ -79,15 +70,7 @@ def _resolve_principal_role(settings: Settings) -> str:
 
 def _resolve_tenant_id() -> Optional[str]:
     try:
-        from agent_platform.core.runtime.contextvars import current_principal
-
-        principal = current_principal.get()
-        if principal is not None and principal.tenant_id:
-            return principal.tenant_id
-    except Exception:
-        pass
-    try:
-        from agent_platform.domain.principal import get_principal
+        from agent_platform.core.runtime.principal import get_principal
 
         tid = get_principal().tenant_id
         if tid:

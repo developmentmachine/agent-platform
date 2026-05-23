@@ -21,7 +21,7 @@ from agent_platform.runtime.jobs import (
 )
 from agent_platform.config.settings import Settings, get_settings
 from agent_platform.core.domain.models import GenerateRequest
-from agent_platform.domain.principal import PrincipalContext
+from agent_platform.core.runtime.principal import PrincipalContext
 from agent_platform.infra.persistence.db import init_db
 from agent_platform.adapters.http.api.deps import require_api_key, require_rate_limit
 from agent_platform.infra.guardrail.guardrails import GuardrailError, validate_generate_request

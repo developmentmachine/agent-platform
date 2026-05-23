@@ -21,7 +21,7 @@ from agent_platform.infra.persistence.db import (
     upsert_prompt_experiment,
     upsert_prompt_experiment_variant,
 )
-from agent_platform.domain.principal import PrincipalContext
+from agent_platform.core.runtime.principal import PrincipalContext
 from agent_platform.adapters.http.api.deps import require_api_key, today_str, utc_now_iso
 from agent_platform.runtime.observability.metrics import get_metrics
 

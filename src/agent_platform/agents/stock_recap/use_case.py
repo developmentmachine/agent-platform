@@ -32,7 +32,7 @@ def _use_pipeline_v2(settings: Settings) -> bool:
 def _current_tenant_id() -> Optional[str]:
     """从 ``current_principal`` 取 tenant_id；CLI / 内部调用没有 principal 时返回 None。"""
     try:
-        from agent_platform.domain.principal import get_principal
+        from agent_platform.core.runtime.principal import get_principal
 
         return get_principal().tenant_id
     except Exception:

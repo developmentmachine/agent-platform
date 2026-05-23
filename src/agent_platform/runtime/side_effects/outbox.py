@@ -97,7 +97,7 @@ def _resolve_tenant_id() -> Optional[str]:
     except Exception:
         pass
     try:
-        from agent_platform.domain.principal import get_principal
+        from agent_platform.core.runtime.principal import get_principal
 
         return get_principal().tenant_id
     except Exception:

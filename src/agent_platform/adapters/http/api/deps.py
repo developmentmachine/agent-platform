@@ -16,7 +16,7 @@ from typing import Any, Deque, Dict, Optional
 from fastapi import Depends, Header, HTTPException, Request
 
 from agent_platform.config.settings import Settings, get_settings
-from agent_platform.domain.principal import (
+from agent_platform.core.runtime.principal import (
     PrincipalContext,
     current_principal,
     set_principal,
@@ -117,11 +117,14 @@ def require_api_key(
             )
             if tenant is None:
                 raise HTTPException(status_code=401, detail="unauthorized")
+            tid = str(tenant["tenant_id"])
             principal = PrincipalContext(
-                tenant_id=str(tenant["tenant_id"]),
+                subject=tid,
+                source="http",
+                tenant_id=tid,
                 role=str(tenant.get("role") or "user"),
                 api_key_hash=digest[:12],
-                source=source,
+                client_host=source,
             )
             set_principal(principal)
             return principal
@@ -137,21 +140,26 @@ def require_api_key(
     if settings.recap_api_key:
         if not x_api_key or x_api_key != settings.recap_api_key:
             raise HTTPException(status_code=401, detail="unauthorized")
+        key_hint = _hash_api_key(x_api_key)[:12]
         principal = PrincipalContext(
+            subject=key_hint,
+            source="http",
             tenant_id=None,
             role=settings.principal_role or "user",
-            api_key_hash=_hash_api_key(x_api_key)[:12],
-            source=source,
+            api_key_hash=key_hint,
+            client_host=source,
         )
         set_principal(principal)
         return principal
 
     # 本地开发：匿名（不强制 key）
     principal = PrincipalContext(
+        subject="anonymous",
+        source="http",
         tenant_id=None,
         role=settings.principal_role or "user",
         api_key_hash=None,
-        source=source,
+        client_host=source,
     )
     set_principal(principal)
     return principal
