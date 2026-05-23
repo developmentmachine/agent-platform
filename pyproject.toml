@@ -23,6 +23,7 @@ dependencies = [
     "qq-botpy>=1.2.1",
     "tenacity>=8.3.0",
     "uvicorn[standard]>=0.29.0",
+    "websockets>=12.0",
 ]
 
 [build-system]
@@ -47,6 +48,7 @@ agent_platform = "agent_platform.adapters.cli.main:cli_main"
 stock-recap-mcp = "agent_platform.adapters.mcp_stdio.main:main"
 agent_platform-tools-mcp = "agent_platform.tools_server:run_server"
 agent-platform-qq-bot = "agent_platform.adapters.qq.__main__:main"
+agent-platform-wecom-bot = "agent_platform.adapters.wecom.__main__:main"
 
 # 内置 Agent 通过本 entry_point 自动被 ``runtime.discover_agents`` 发现；
 # ``factory._register_builtin_agents`` 已显式调用一次，两条路径都 OK，便于 editable install。

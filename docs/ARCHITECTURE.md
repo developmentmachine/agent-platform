@@ -188,10 +188,11 @@ resp = runtime.run(
 | **W2：MCP 物理切换** | `tools_server` 独一真实源；`RecapToolRunner` → `McpToolGateway` | ✅ 已完成 |
 | **W3：recap 物理迁入 `agents/stock_recap/`** | data / llm / effects / prompts / skills / cli / http_routes | ✅ 已完成 |
 | **W4：recap 类化为 `Phase`** | `_phase_*` → Phase 子类；`pipeline_v2` 并行入口 | ✅ 已完成 |
-| **W5：WeCom/QQ SDK 接入** | botpy WS + 企微 AES webhook | ✅ 已完成 |
+| **W5：WeCom/QQ SDK 接入** | QQ botpy WS + 企微 AES webhook + 企微 AiBot WebSocket | ✅ 已完成 |
 | **W6：CLI/HTTP/Scheduler 自动装配** | `AgentRegistry` 驱动，无硬编码 AGENTS | ✅ 已完成 |
 | **W7：删 deprecation shim** | 全库 canonical import；CI `lint-imports` | ✅ 已完成 |
 | **W8：infra / adapters 物理迁移** | `infrastructure/*` → `infra/*`；`interfaces/*` → `adapters/*`；旧路径 shim | ✅ 已完成 |
+| **W9：observability / budget / RunContext** | → `runtime/observability`、`core/runtime/*`；旧路径 shim | ✅ 已完成 |
 
 ---
 
