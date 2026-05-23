@@ -69,11 +69,11 @@
 | `tools_server/` | 独立 MCP server | `server.py` · `handlers/` |
 | `agents/<id>/` | 业务 Agent（互相隔离） | `manifest.py` · `domain/` · `phases/` · `prompts/` · `skills/` |
 | `adapters/` | Driving Adapters | `cli/` · `http/` · `wecom/` · `qq/` · `scheduler/` · `mcp_stdio/` |
-| `application/` 等 | **遗留 4 层路径（下一波）** | `domain` / `application` / `observability` / `policy` / `presentation` 仍待迁入 `core` / `agents` / `runtime` / `infra` |
+| `application/` · `domain/` · `observability/` · `policy/` · `presentation/` | **仅 backward-compat shim** | 真实实现已分别在 `core/` · `runtime/` · `infra/` · `agents/`；新代码勿再引用 |
 
-> **当前状态**：`infra/*`（llm / persistence / memory / push / tools / mcp_client）与 `adapters/*`（http / cli / scheduler / mcp_stdio / wecom / qq）已是**规范真实路径**；
-> `infrastructure/*` 与 `interfaces/*` 仅保留 **backward-compat shim**（`sys.modules` 别名）。
-> 业务代码与测试以 `agent_platform.infra.*` / `agent_platform.adapters.*` 为 canonical import。
+> **当前状态**：`infra/*`、`adapters/*`、`runtime/*`（含 `observability`、`jobs`、`side_effects`）、`core/domain/*`、`agents/<id>/` 为 **canonical 路径**；
+> `infrastructure/*`、`interfaces/*`、`application/*`、`domain/*`（子模块）、`policy/`、`observability/`、`presentation/` 仅保留 **shim**（`sys.modules` 别名或薄 re-export）。
+> 业务代码与测试以 `agent_platform.infra.*` / `agent_platform.adapters.*` / `agent_platform.runtime.*` 等为规范 import。
 
 ---
 
@@ -193,6 +193,10 @@ resp = runtime.run(
 | **W7：删 deprecation shim** | 全库 canonical import；CI `lint-imports` | ✅ 已完成 |
 | **W8：infra / adapters 物理迁移** | `infrastructure/*` → `infra/*`；`interfaces/*` → `adapters/*`；旧路径 shim | ✅ 已完成 |
 | **W9：observability / budget / RunContext** | → `runtime/observability`、`core/runtime/*`；旧路径 shim | ✅ 已完成 |
+| **W10：policy → guardrail** | `policy/` → `infra/guardrail/`（含 `rules.yaml`）；旧路径 shim | ✅ 已完成 |
+| **W11：domain 平台模块** | `domain/models` 等 → `core/domain/*`；`principal` / `run_context` 仍为 shim | ✅ 已完成 |
+| **W12：application 平台代码** | `side_effects` / `jobs` → `runtime/`；`backtest/registry` → `agents/stock_recap/backtest/`；`application/*` shim | ✅ 已完成 |
+| **W13：presentation 收尾** | 展示逻辑在 `agents/<id>/render.py`；`presentation/render` 为 shim | ✅ 已完成 |
 
 ---
 
@@ -203,13 +207,15 @@ resp = runtime.run(
 | `interfaces/` | `adapters/` | 入口适配器；新增 `wecom/` `qq/` |
 | `application/recap.py` | `agents/stock_recap/manifest.py` 调用 | recap 入口收敛到 Agent manifest |
 | `application/orchestration/` | `core/orchestration/`（泛型）+ `agents/stock_recap/`（recap 专用） | 编排引擎与具体 Agent 解耦 |
-| `application/side_effects/` | `core/orchestration/side_effects_bus`（机制）+ `agents/stock_recap/effects/`（订阅） | 副作用走总线 |
-| `domain/` | `core/runtime/`（平台类型）+ `agents/stock_recap/domain/`（业务类型） | 拆分中 |
+| `application/side_effects/` | `runtime/side_effects/`（outbox/deferred）+ `agents/stock_recap/effects/`（业务动作） | Composition Root 可触达 infra/agents |
+| `application/jobs.py` | `runtime/jobs.py` | 调度/API 共用任务定义 |
+| `application/backtest/registry.py` | `agents/stock_recap/backtest/registry.py` | 策略注册与 recap Agent 绑定 |
+| `domain/` | `core/domain/`（平台模型/仓储/注册表）+ `agents/stock_recap/domain/`（业务类型） | `domain/*` 子路径为 shim |
 | `infrastructure/` | `infra/` | 已物理迁移；`infrastructure/*` 为 shim |
 | `interfaces/` | `adapters/` | 已物理迁移；`interfaces/*` 为 shim |
-| `observability/` | `runtime/observability/`（W1 仍保持老路径） | |
-| `policy/` | 通用部分 → `infra/guardrail/`；recap 输出规则 → `agents/stock_recap/` | |
-| `presentation/` | `agents/<id>/render.py`（每 Agent 自带） | |
+| `observability/` | `runtime/observability/` | 旧顶层包为 shim |
+| `policy/` | `infra/guardrail/` | recap 输出规则仍在 `agents/stock_recap/` |
+| `presentation/` | `agents/<id>/render.py` | 例：`agents/stock_recap/render.py`；`presentation/render` 为 shim |
 | `interfaces/mcp_stdio.py` | `tools_server/server.py` + `adapters/mcp_stdio/` | 工具服务 vs Agent 服务分开 |
 
 ---
