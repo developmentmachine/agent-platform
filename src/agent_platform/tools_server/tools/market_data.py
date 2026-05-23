@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from agent_platform.infrastructure.tools.handlers.market_data import run_query_market_data
+from agent_platform.infra.tools.handlers.market_data import run_query_market_data
 from agent_platform.tools_server.registry import ToolSpec
 
 

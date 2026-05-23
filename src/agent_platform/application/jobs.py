@@ -29,7 +29,7 @@ from agent_platform.config.settings import Settings
 from agent_platform.domain.models import GenerateRequest
 from agent_platform.domain.principal import PrincipalContext, get_principal
 from agent_platform.domain.run_context import RunContext
-from agent_platform.infrastructure.persistence.db import (
+from agent_platform.infra.persistence.db import (
     insert_job,
     list_jobs,
     load_job,

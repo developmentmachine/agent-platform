@@ -29,10 +29,10 @@ from agent_platform.domain.models import (
 )
 from agent_platform.agents.stock_recap.data.collector import collect_snapshot
 from agent_platform.agents.stock_recap.data.features import build_features
-from agent_platform.infrastructure.llm.backends import call_llm, model_effective
+from agent_platform.infra.llm.backends import call_llm, model_effective
 from agent_platform.agents.stock_recap.llm.eval import auto_eval
 from agent_platform.agents.stock_recap.llm.prompts import build_messages
-from agent_platform.infrastructure.persistence.db import (
+from agent_platform.infra.persistence.db import (
     insert_recap_audit,
     insert_run,
     load_feedback_summary,

@@ -159,7 +159,7 @@ class Settings(BaseSettings):
         description="可选；未设时使用环境变量 OTEL_EXPORTER_OTLP_ENDPOINT",
     )
 
-    # LLM function calling（进程内 OpenAI/Ollama 工具循环；独立 MCP 见 agent_platform.interfaces.mcp_stdio）
+    # LLM function calling（进程内 OpenAI/Ollama 工具循环；独立 MCP 见 agent_platform.adapters.mcp_stdio.main）
     tools_enabled: bool = Field(default=False, alias="RECAP_TOOLS_ENABLED")
     tools_web_search: bool = Field(default=True, alias="RECAP_TOOLS_WEB_SEARCH")
     tools_market_data: bool = Field(default=True, alias="RECAP_TOOLS_MARKET_DATA")

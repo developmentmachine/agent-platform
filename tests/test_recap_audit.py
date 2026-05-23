@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 
 from agent_platform.config.settings import Settings
 from agent_platform.domain.models import LlmTokens, RecapDaily, RecapDailySection
-from agent_platform.infrastructure.persistence.db import (
+from agent_platform.infra.persistence.db import (
     init_db,
     insert_recap_audit,
     load_recap_audit,
@@ -209,7 +209,7 @@ def test_audit_endpoint_get_by_id(tmp_path, monkeypatch):
         critic_retries_used=0,
     )
 
-    from agent_platform.interfaces.api.app import create_app
+    from agent_platform.adapters.http.api.app import create_app
 
     client = TestClient(create_app())
 
@@ -246,7 +246,7 @@ def test_audit_endpoint_list_filter_by_mode(tmp_path, monkeypatch):
             critic_retries_used=0,
         )
 
-    from agent_platform.interfaces.api.app import create_app
+    from agent_platform.adapters.http.api.app import create_app
 
     client = TestClient(create_app())
     r = client.get("/v1/audit?mode=daily&limit=10", headers={"X-API-Key": "test-key"})

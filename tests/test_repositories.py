@@ -27,8 +27,8 @@ from agent_platform.domain.repositories import (
     RecapAuditRepository,
     RunRepository,
 )
-from agent_platform.infrastructure.persistence.db import init_db
-from agent_platform.infrastructure.persistence.repositories import (
+from agent_platform.infra.persistence.db import init_db
+from agent_platform.infra.persistence.repositories import (
     Repositories,
     build_default_repositories,
 )

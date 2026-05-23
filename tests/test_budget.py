@@ -99,7 +99,7 @@ def test_wall_ms_exceed_after_sleep_simulated() -> None:
 def test_tool_runner_increments_via_contextvar(monkeypatch: pytest.MonkeyPatch) -> None:
     """W2: runner 现在委托 ``McpToolGateway``，patch 点改为 gateway 的 _call_sync。"""
     from agent_platform.core.ports.mcp_tool import McpToolResult
-    from agent_platform.infrastructure.tools.runner import RecapToolRunner
+    from agent_platform.infra.tools.runner import RecapToolRunner
     from agent_platform.runtime import mcp_gateway as gw_mod
 
     def _fake_call(self, name, arguments, *, timeout_s=None):
@@ -143,7 +143,7 @@ def test_check_budget_between_phases_skips_act_and_critique(
 def test_act_phase_handles_budget_exceeded_gracefully(monkeypatch: pytest.MonkeyPatch) -> None:
     """provider 抛 ``LlmBudgetExceeded`` 时 act 节点不应让整个 pipeline 崩。"""
     from agent_platform.agents.stock_recap import legacy_pipeline as pipeline_mod
-    from agent_platform.infrastructure.llm import backends as backends_mod
+    from agent_platform.infra.llm import backends as backends_mod
 
     s = _settings(monkeypatch)
     state = RecapAgentRunState(

@@ -240,7 +240,7 @@ def run(
 接着在平台分发器 [interfaces/cli.py](../src/agent_platform/interfaces/cli.py) 的 `AGENTS` 字典里追加一行：
 
 ```python
-from agent_platform.interfaces.agents import my_agent_cli, stock_recap_cli
+from agent_platform.adapters.cli.agents import my_agent_cli, stock_recap_cli
 
 AGENTS: dict[str, Any] = {
     "stock-recap": stock_recap_cli,
@@ -264,7 +264,7 @@ uv run agent_platform my-agent --help
 ```python
 from fastapi import APIRouter, Depends
 from agent_platform.application.my_agent import run_my_agent
-from agent_platform.interfaces.api.deps import get_settings
+from agent_platform.adapters.http.api.deps import get_settings
 
 router = APIRouter(prefix="/v1/my-agent", tags=["my-agent"])
 

@@ -512,7 +512,7 @@ class McpToolGateway:
         if not self._settings.tool_audit_enabled:
             return
         try:
-            from agent_platform.infrastructure.persistence.db import insert_tool_invocation
+            from agent_platform.infra.persistence.db import insert_tool_invocation
 
             insert_tool_invocation(
                 self._settings.db_path,

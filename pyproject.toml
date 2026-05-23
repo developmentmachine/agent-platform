@@ -43,8 +43,8 @@ packages = ["src/agent_platform"]
 #   [project.entry-points."agent_platform.agents"]
 #   my_agent = "my_pkg.manifest:register"   # register(AgentRegistry) -> None
 [project.scripts]
-agent_platform = "agent_platform.interfaces.cli:cli_main"
-stock-recap-mcp = "agent_platform.interfaces.mcp_stdio:main"
+agent_platform = "agent_platform.adapters.cli.main:cli_main"
+stock-recap-mcp = "agent_platform.adapters.mcp_stdio.main:main"
 agent_platform-tools-mcp = "agent_platform.tools_server:run_server"
 agent-platform-qq-bot = "agent_platform.adapters.qq.__main__:main"
 

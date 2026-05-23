@@ -1,5 +1,8 @@
-"""向量记忆基础设施（Qdrant 默认实现；接口可替换为 pgvector 等）。"""
+"""Backward-compat shim → ``agent_platform.infra.memory``."""
+from __future__ import annotations
 
-from agent_platform.infrastructure.memory.protocols import EmbeddingProvider, VectorStore
+import importlib
+import sys
 
-__all__ = ["EmbeddingProvider", "VectorStore"]
+_real = importlib.import_module("agent_platform.infra.memory")
+sys.modules[__name__] = _real

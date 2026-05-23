@@ -69,11 +69,11 @@
 | `tools_server/` | 独立 MCP server | `server.py` · `handlers/` |
 | `agents/<id>/` | 业务 Agent（互相隔离） | `manifest.py` · `domain/` · `phases/` · `prompts/` · `skills/` |
 | `adapters/` | Driving Adapters | `cli/` · `http/` · `wecom/` · `qq/` · `scheduler/` · `mcp_stdio/` |
-| `application/` 等 | **迁移中：老 4 层路径** | 与 v2 路径并存；后续 commit 逐步迁入 v2 路径 |
+| `application/` 等 | **遗留 4 层路径（下一波）** | `domain` / `application` / `observability` / `policy` / `presentation` 仍待迁入 `core` / `agents` / `runtime` / `infra` |
 
-> **当前 commit 的迁移策略**：core / runtime / agents / adapters / tools_server / infra 是**新的规范路径**；
-> infrastructure / interfaces / application / domain / observability / policy / presentation 仍是**真实代码所在**。
-> 两套路径**完全等价**，业务代码与测试无任何破坏。后续 commit 将物理迁移代码并把旧路径转为 shim。
+> **当前状态**：`infra/*`（llm / persistence / memory / push / tools / mcp_client）与 `adapters/*`（http / cli / scheduler / mcp_stdio / wecom / qq）已是**规范真实路径**；
+> `infrastructure/*` 与 `interfaces/*` 仅保留 **backward-compat shim**（`sys.modules` 别名）。
+> 业务代码与测试以 `agent_platform.infra.*` / `agent_platform.adapters.*` 为 canonical import。
 
 ---
 
@@ -191,6 +191,7 @@ resp = runtime.run(
 | **W5：WeCom/QQ SDK 接入** | botpy WS + 企微 AES webhook | ✅ 已完成 |
 | **W6：CLI/HTTP/Scheduler 自动装配** | `AgentRegistry` 驱动，无硬编码 AGENTS | ✅ 已完成 |
 | **W7：删 deprecation shim** | 全库 canonical import；CI `lint-imports` | ✅ 已完成 |
+| **W8：infra / adapters 物理迁移** | `infrastructure/*` → `infra/*`；`interfaces/*` → `adapters/*`；旧路径 shim | ✅ 已完成 |
 
 ---
 
@@ -203,7 +204,8 @@ resp = runtime.run(
 | `application/orchestration/` | `core/orchestration/`（泛型）+ `agents/stock_recap/`（recap 专用） | 编排引擎与具体 Agent 解耦 |
 | `application/side_effects/` | `core/orchestration/side_effects_bus`（机制）+ `agents/stock_recap/effects/`（订阅） | 副作用走总线 |
 | `domain/` | `core/runtime/`（平台类型）+ `agents/stock_recap/domain/`（业务类型） | 拆分中 |
-| `infrastructure/` | `infra/` | 别名等价；后续物理迁移 |
+| `infrastructure/` | `infra/` | 已物理迁移；`infrastructure/*` 为 shim |
+| `interfaces/` | `adapters/` | 已物理迁移；`interfaces/*` 为 shim |
 | `observability/` | `runtime/observability/`（W1 仍保持老路径） | |
 | `policy/` | 通用部分 → `infra/guardrail/`；recap 输出规则 → `agents/stock_recap/` | |
 | `presentation/` | `agents/<id>/render.py`（每 Agent 自带） | |

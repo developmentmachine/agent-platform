@@ -10,11 +10,11 @@ from agent_platform.agents.stock_recap.memory.manager import check_and_run_evolu
 from agent_platform.config.settings import Settings, get_settings
 from agent_platform.domain.models import FeedbackRequest
 from agent_platform.domain.principal import PrincipalContext
-from agent_platform.infrastructure.persistence.db import init_db, insert_feedback
-from agent_platform.interfaces.api.deps import require_api_key, stable_json, utc_now_iso
+from agent_platform.infra.persistence.db import init_db, insert_feedback
+from agent_platform.adapters.http.api.deps import require_api_key, stable_json, utc_now_iso
 from agent_platform.policy.guardrails import GuardrailError, validate_feedback_request
 
-logger = logging.getLogger("agent_platform.interfaces.api.feedback")
+logger = logging.getLogger("agent_platform.adapters.http.api.feedback")
 
 router = APIRouter(tags=["recap"])
 

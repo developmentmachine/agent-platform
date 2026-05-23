@@ -26,10 +26,10 @@ from agent_platform.domain.models import (
     RecapDaily,
     RecapDailySection,
 )
-from agent_platform.infrastructure.llm.backends import call_llm
-from agent_platform.infrastructure.llm.providers import register_provider
-from agent_platform.infrastructure.persistence.db import init_db
-from agent_platform.infrastructure.tools.runner import RecapToolRunner
+from agent_platform.infra.llm.backends import call_llm
+from agent_platform.infra.llm.providers import register_provider
+from agent_platform.infra.persistence.db import init_db
+from agent_platform.infra.tools.runner import RecapToolRunner
 from agent_platform.observability.metrics import (
     get_metrics,
     record_outbox_action,
@@ -134,11 +134,11 @@ def _patched_backend(monkeypatch):
         return "metrics_fake"
 
     monkeypatch.setattr(
-        "agent_platform.infrastructure.llm.backends.resolve_provider",
+        "agent_platform.infra.llm.backends.resolve_provider",
         _fake_resolve_provider,
     )
     monkeypatch.setattr(
-        "agent_platform.infrastructure.llm.backends.llm_backend_effective",
+        "agent_platform.infra.llm.backends.llm_backend_effective",
         _fake_backend_effective,
     )
     return holder
@@ -312,7 +312,7 @@ def test_metrics_prom_endpoint_returns_exposition_format(tmp_path, monkeypatch):
     record_recap_run("daily", "live", "ok")
     record_phase_duration("plan", 42.0)
 
-    from agent_platform.interfaces.api.app import create_app
+    from agent_platform.adapters.http.api.app import create_app
 
     app = create_app()
     client = TestClient(app)
@@ -335,7 +335,7 @@ def test_metrics_prom_renders_for_unrecorded_metrics(tmp_path, monkeypatch):
     monkeypatch.setenv("RECAP_DB_PATH", str(tmp_path / "ep2.db"))
     monkeypatch.setenv("RECAP_WXWORK_WEBHOOK_URL", "http://example.invalid/hook")
     monkeypatch.setenv("RECAP_PUSH_ENABLED", "false")
-    from agent_platform.interfaces.api.app import create_app
+    from agent_platform.adapters.http.api.app import create_app
 
     client = TestClient(create_app())
     resp = client.get("/metrics/prom")

@@ -201,7 +201,7 @@ def test_gateway_execute_ok_calls_client(monkeypatch, tmp_path) -> None:
 def test_runner_is_backed_by_mcp_gateway(monkeypatch, tmp_path) -> None:
     """W2: ``RecapToolRunner.openai_compatible_schemas`` 必须由 gateway 推导，
     而不是历史的 ``TOOL_SCHEMAS`` 硬编码常量。"""
-    from agent_platform.infrastructure.tools.runner import RecapToolRunner
+    from agent_platform.infra.tools.runner import RecapToolRunner
 
     s = _settings(monkeypatch, tmp_path)
     runner = RecapToolRunner(s)

@@ -141,7 +141,7 @@ def _write_output_files(
 def _scheduled_handler(mode: str, settings: Any) -> None:
     """统一的 cron handler — daily_recap / strategy 都走这条。"""
     from agent_platform.agents.stock_recap.use_case import generate_once
-    from agent_platform.infrastructure.persistence.db import init_db
+    from agent_platform.infra.persistence.db import init_db
 
     if not _is_trading_today():
         logger.info(_stable_json({"event": "scheduler_skip", "job": f"recap_{mode}", "reason": "non_trading_day"}))

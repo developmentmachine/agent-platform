@@ -22,8 +22,8 @@ from agent_platform.domain.models import (
     RecapDaily,
     RecapDailySection,
 )
-from agent_platform.infrastructure.llm.backends import call_llm
-from agent_platform.infrastructure.persistence.db import (
+from agent_platform.infra.llm.backends import call_llm
+from agent_platform.infra.persistence.db import (
     get_conn,
     init_db,
     insert_recap_audit,

@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
-from agent_platform.infrastructure.persistence.db import (
+from agent_platform.infra.persistence.db import (
     claim_due_pending_actions,
     enqueue_pending_action,
     list_pending_actions,

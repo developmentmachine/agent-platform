@@ -1,5 +1,8 @@
-"""HTTP API。"""
+"""Shim → ``agent_platform.adapters.http.api``."""
+from __future__ import annotations
 
-from agent_platform.interfaces.api.routes import app
+import importlib
+import sys
 
-__all__ = ["app"]
+_real = importlib.import_module("agent_platform.adapters.http.api")
+sys.modules[__name__] = _real
