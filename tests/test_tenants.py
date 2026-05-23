@@ -28,8 +28,8 @@ from agent_platform.core.domain.models import (
     RecapDaily,
     RecapDailySection,
 )
-from agent_platform.domain.principal import PrincipalContext, current_principal
-from agent_platform.domain.run_context import RunContext
+from agent_platform.core.runtime.principal import PrincipalContext, current_principal
+from agent_platform.core.runtime.run_context import RunContext
 from agent_platform.infra.persistence.db import (
     count_tenants,
     enqueue_pending_action,

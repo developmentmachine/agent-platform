@@ -16,10 +16,11 @@ from agent_platform.agents.stock_recap.legacy_pipeline import (
     iter_recap_agent_ndjson,
 )
 from agent_platform.agents.stock_recap.pipeline_v2 import execute_v2, iter_ndjson_v2
-from agent_platform.application.side_effects import run_deferred_post_recap, try_run_backtest
+from agent_platform.agents.stock_recap.effects.backtest import try_run_backtest
+from agent_platform.runtime.side_effects.deferred import run_deferred_post_recap
 from agent_platform.config.settings import Settings
 from agent_platform.core.domain.models import GenerateRequest, GenerateResponse
-from agent_platform.domain.run_context import RunContext
+from agent_platform.core.runtime.run_context import RunContext
 from agent_platform.runtime.observability.runtime_context import current_budget, current_run_context
 from agent_platform.runtime.observability.tracing import configure_tracing, get_tracer
 from agent_platform.infra.guardrail.guardrails import validate_generate_request

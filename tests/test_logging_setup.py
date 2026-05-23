@@ -17,7 +17,7 @@ from typing import Any, Dict
 
 import pytest
 
-from agent_platform.domain.run_context import RunContext
+from agent_platform.core.runtime.run_context import RunContext
 from agent_platform.runtime.observability.logging_setup import (
     JsonFormatter,
     RunContextFilter,

@@ -24,7 +24,7 @@ from agent_platform.core.domain.models import (
     RecapDaily,
     RecapDailySection,
 )
-from agent_platform.domain.run_context import RunContext
+from agent_platform.core.runtime.run_context import RunContext
 from agent_platform.infra.llm import backends as backends_mod
 
 

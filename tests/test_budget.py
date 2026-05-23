@@ -25,7 +25,7 @@ from agent_platform.core.domain.models import (
     LlmTokens,
     Recap,
 )
-from agent_platform.domain.run_context import RunContext
+from agent_platform.core.runtime.run_context import RunContext
 from agent_platform.runtime.observability.runtime_context import current_budget
 
 

@@ -30,7 +30,7 @@ from agent_platform.infra.guardrail.tools import (
     build_default_registry,
 )
 from agent_platform.runtime import mcp_gateway as gw_mod
-from agent_platform.domain.run_context import RunContext
+from agent_platform.core.runtime.run_context import RunContext
 
 
 # ─── fixtures ─────────────────────────────────────────────────────────────────

@@ -10,7 +10,7 @@ from agent_platform.agents.stock_recap.phases._helpers import span_phase, stable
 from agent_platform.agents.stock_recap.phases.base import RecapPhase
 from agent_platform.agents.stock_recap.recap_state import RecapAgentRunState
 from agent_platform.agents.stock_recap.state import RecapRunState
-from agent_platform.application.side_effects import try_run_backtest
+from agent_platform.agents.stock_recap.effects.backtest import try_run_backtest
 
 logger = logging.getLogger("agent_platform.agents.stock_recap.phases.reflect")
 

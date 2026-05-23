@@ -24,7 +24,7 @@ from agent_platform.agents.stock_recap.recap_state import RecapAgentRunState
 from agent_platform.agents.stock_recap.legacy_pipeline import execute_recap_pipeline
 from agent_platform.config.settings import Settings
 from agent_platform.core.domain.models import GenerateRequest
-from agent_platform.domain.run_context import RunContext
+from agent_platform.core.runtime.run_context import RunContext
 
 
 def _settings(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Settings:

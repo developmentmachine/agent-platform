@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 from agent_platform.core.runtime.budget import AgentBudget
 from agent_platform.config.settings import Settings
 from agent_platform.core.domain.models import Features, GenerateRequest, LlmTokens, MarketSnapshot, Recap
-from agent_platform.domain.run_context import RunContext
+from agent_platform.core.runtime.run_context import RunContext
 
 
 @dataclass

@@ -11,10 +11,10 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from agent_platform.agents.stock_recap.use_case import generate_once, iter_generate_ndjson
-from agent_platform.application.side_effects import run_deferred_post_recap
+from agent_platform.runtime.side_effects.deferred import run_deferred_post_recap
 from agent_platform.config.settings import Settings, get_settings
 from agent_platform.core.domain.models import GenerateRequest, GenerateResponse
-from agent_platform.domain.run_context import RunContext
+from agent_platform.core.runtime.run_context import RunContext
 from agent_platform.infra.persistence.db import init_db
 from agent_platform.adapters.http.api.deps import require_api_key, require_rate_limit
 from agent_platform.infra.guardrail.guardrails import GuardrailError, validate_generate_request

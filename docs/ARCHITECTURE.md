@@ -197,6 +197,8 @@ resp = runtime.run(
 | **W11：domain 平台模块** | `domain/models` 等 → `core/domain/*`；`principal` / `run_context` 仍为 shim | ✅ 已完成 |
 | **W12：application 平台代码** | `side_effects` / `jobs` → `runtime/`；`backtest/registry` → `agents/stock_recap/backtest/`；`application/*` shim | ✅ 已完成 |
 | **W13：presentation 收尾** | 展示逻辑在 `agents/<id>/render.py`；`presentation/render` 为 shim | ✅ 已完成 |
+| **W14：Principal 合并** | `domain.principal` 与 `core.runtime.principal` 合一；单一 ContextVar | ✅ 已完成 |
+| **W15：canonical import** | 业务代码统一 `core.runtime` / `runtime` / `agents` 路径；import-linter 禁止遗留顶层包 | ✅ 已完成 |
 
 ---
 

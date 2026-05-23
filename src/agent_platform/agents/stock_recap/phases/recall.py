@@ -15,7 +15,7 @@ from agent_platform.agents.stock_recap.phases._helpers import span_phase, stable
 from agent_platform.agents.stock_recap.phases.base import RecapPhase
 from agent_platform.agents.stock_recap.recap_state import RecapAgentRunState
 from agent_platform.agents.stock_recap.state import RecapRunState
-from agent_platform.application.side_effects import load_recent_backtests_simple
+from agent_platform.agents.stock_recap.effects.backtest import load_recent_backtests_simple
 from agent_platform.infra.persistence.db import load_feedback_summary
 
 import logging
