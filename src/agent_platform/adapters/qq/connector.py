@@ -4,9 +4,10 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from agent_platform.adapters.qq.dedup import MsgIdDedup
+from agent_platform.adapters.reply_chunks import split_reply_chunks
 from agent_platform.adapters.qq.frame_mapper import (
     map_qq_c2c_message,
     map_qq_group_message,
@@ -18,7 +19,10 @@ from agent_platform.runtime import AgentRuntime
 logger = logging.getLogger("agent_platform.adapters.qq.connector")
 
 QQ_BOT_DEFAULT_INTENTS = 0
-QQ_REPLY_MAX_CHARS = 1800
+# 单条文本建议长度（官方未公布硬上限）；长文通过分片发送，不在 adapter 截断。
+QQ_MESSAGE_MAX_CHARS = 1800
+# 被动回复同一 msg_id 最多 5 次（QQ 开放平台）；超出部分走主动消息。
+QQ_PASSIVE_REPLY_LIMIT = 5
 
 
 def _resolve_app_secret(env: Dict[str, str]) -> Optional[str]:
@@ -101,7 +105,7 @@ class QqBotConnector:
         *,
         options: QqBotConnectorOptions,
         runtime: AgentRuntime,
-        reply_sender: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+        reply_sender: Optional[Callable[[List[str], Dict[str, Any]], None]] = None,
     ) -> None:
         self._opts = options
         self._runtime = runtime
@@ -135,13 +139,13 @@ class QqBotConnector:
         )
         client.run(appid=self._opts.app_id, secret=self._opts.app_secret)
 
-    def handle_group_message(self, frame: Dict[str, Any]) -> Optional[str]:
+    def handle_group_message(self, frame: Dict[str, Any]) -> Optional[list[str]]:
         return self._dispatch(frame, kind="group")
 
-    def handle_c2c_message(self, frame: Dict[str, Any]) -> Optional[str]:
+    def handle_c2c_message(self, frame: Dict[str, Any]) -> Optional[list[str]]:
         return self._dispatch(frame, kind="c2c")
 
-    def _dispatch(self, frame: Dict[str, Any], *, kind: str) -> Optional[str]:
+    def _dispatch(self, frame: Dict[str, Any], *, kind: str) -> Optional[list[str]]:
         msg_id = str(frame.get("id") or frame.get("msg_id") or "")
         if msg_id and self._dedup.seen(msg_id):
             return None
@@ -167,10 +171,10 @@ class QqBotConnector:
             )
         except Exception as e:
             logger.exception("qq runtime.run failed")
-            return f"⚠ 处理失败：{e}"
+            return [f"⚠ 处理失败：{e}"]
 
         if resp.errors:
-            return _truncate_reply(f"⚠ {resp.errors[0]}")
+            return [f"⚠ {resp.errors[0]}"]
 
         rendered = (
             resp.rendered.get("wechat_text")
@@ -183,9 +187,18 @@ class QqBotConnector:
                 rendered = f"⚠ {err}"
         if not rendered:
             rendered = "（未生成正文，请稍后重试）"
-        rendered = _truncate_reply(rendered)
-        self._reply_sender(rendered, {"msg_id": msg_id, "principal": principal.subject, "kind": kind})
-        return rendered
+
+        chunks = split_reply_chunks(rendered, max_chars=QQ_MESSAGE_MAX_CHARS)
+        self._reply_sender(
+            chunks,
+            {
+                "msg_id": msg_id,
+                "principal": principal.subject,
+                "kind": kind,
+                "frame": frame,
+            },
+        )
+        return chunks
 
     def _payload_for_agent(self, text: str) -> Dict[str, Any]:
         mode = "strategy" if ("策略" in text or "明天" in text or "次日" in text) else "daily"
@@ -199,20 +212,15 @@ class QqBotConnector:
             payload["model"] = self._opts.recap_model
         return payload
 
-    def _default_reply_sender(self, text: str, meta: Dict[str, Any]) -> None:
+    def _default_reply_sender(self, chunks: list[str], meta: Dict[str, Any]) -> None:
+        total_len = sum(len(c) for c in chunks)
         logger.info(
-            "qq reply (sdk handles send): kind=%s msg_id=%s len=%s",
+            "qq reply (sdk handles send): kind=%s msg_id=%s parts=%s len=%s",
             meta.get("kind"),
             meta.get("msg_id"),
-            len(text),
+            len(chunks),
+            total_len,
         )
-
-
-def _truncate_reply(text: str, *, max_chars: int = QQ_REPLY_MAX_CHARS) -> str:
-    text = text.strip()
-    if len(text) <= max_chars:
-        return text
-    return text[: max_chars - 20].rstrip() + "\n\n…（内容过长已截断）"
 
 
 __all__ = [
@@ -221,4 +229,6 @@ __all__ = [
     "load_qq_options_from_env",
     "load_qq_options_from_settings",
     "QQ_BOT_DEFAULT_INTENTS",
+    "QQ_MESSAGE_MAX_CHARS",
+    "QQ_PASSIVE_REPLY_LIMIT",
 ]

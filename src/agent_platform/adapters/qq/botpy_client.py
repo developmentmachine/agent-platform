@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
+
+from agent_platform.adapters.qq.connector import QQ_PASSIVE_REPLY_LIMIT
 
 logger = logging.getLogger("agent_platform.adapters.qq.botpy_client")
 
@@ -56,6 +58,49 @@ def _frame_from_at_message(message: Any) -> Dict[str, Any]:
     return frame
 
 
+async def _send_chunked_reply(message: Any, chunks: List[str]) -> None:
+    """分片发送：前 ``QQ_PASSIVE_REPLY_LIMIT`` 条为被动回复（msg_seq），其余为主动消息。"""
+    if not chunks:
+        return
+    api = message._api
+    msg_id = getattr(message, "id", None)
+
+    for idx, content in enumerate(chunks):
+        msg_seq = idx + 1
+        try:
+            if msg_seq <= QQ_PASSIVE_REPLY_LIMIT and msg_id:
+                await message.reply(content=content, msg_seq=msg_seq)
+                continue
+
+            group_openid = getattr(message, "group_openid", None)
+            if group_openid:
+                await api.post_group_message(
+                    group_openid=group_openid,
+                    content=content,
+                    msg_type=0,
+                )
+                continue
+
+            user_openid = getattr(getattr(message, "author", None), "user_openid", None)
+            if user_openid:
+                await api.post_c2c_message(
+                    openid=user_openid,
+                    content=content,
+                    msg_type=0,
+                )
+                continue
+
+            await message.reply(content=content, msg_seq=min(msg_seq, QQ_PASSIVE_REPLY_LIMIT))
+        except Exception:
+            logger.exception(
+                "qq send chunk failed: part=%s/%s passive=%s",
+                msg_seq,
+                len(chunks),
+                msg_seq <= QQ_PASSIVE_REPLY_LIMIT,
+            )
+            raise
+
+
 def build_botpy_client(connector: Any):
     """构造 botpy.Client 子类，事件转发至 connector。
 
@@ -74,37 +119,29 @@ def build_botpy_client(connector: Any):
             name = getattr(robot, "name", None) if robot else None
             logger.info("qq botpy ready: bot=%s", name or "?")
 
-        async def _run_handler(self, handler_name: str, frame: Dict[str, Any]) -> str | None:
+        async def _run_handler(self, handler_name: str, frame: Dict[str, Any]) -> Optional[List[str]]:
             loop = asyncio.get_running_loop()
             handler = getattr(connector, handler_name)
             return await loop.run_in_executor(None, lambda: handler(frame))
 
+        async def _reply_chunks(self, message: Any, chunks: Optional[List[str]]) -> None:
+            if chunks:
+                await _send_chunked_reply(message, chunks)
+
         async def on_group_at_message_create(self, message):
             frame = _frame_from_group_message(message, group_at=True)
-            reply = await self._run_handler("handle_group_message", frame)
-            if reply:
-                try:
-                    await message.reply(content=reply)
-                except Exception:
-                    logger.exception("qq group reply failed")
+            chunks = await self._run_handler("handle_group_message", frame)
+            await self._reply_chunks(message, chunks)
 
         async def on_c2c_message_create(self, message):
             frame = _frame_from_c2c_message(message)
-            reply = await self._run_handler("handle_c2c_message", frame)
-            if reply:
-                try:
-                    await message.reply(content=reply)
-                except Exception:
-                    logger.exception("qq c2c reply failed")
+            chunks = await self._run_handler("handle_c2c_message", frame)
+            await self._reply_chunks(message, chunks)
 
         async def on_at_message_create(self, message):
             frame = _frame_from_at_message(message)
-            reply = await self._run_handler("handle_group_message", frame)
-            if reply:
-                try:
-                    await message.reply(content=reply)
-                except Exception:
-                    logger.exception("qq at_message reply failed")
+            chunks = await self._run_handler("handle_group_message", frame)
+            await self._reply_chunks(message, chunks)
 
     return _PlatformBotpyClient(intents=intents)
 
@@ -114,4 +151,5 @@ __all__ = [
     "_frame_from_group_message",
     "_frame_from_c2c_message",
     "_frame_from_at_message",
+    "_send_chunked_reply",
 ]
