@@ -1,7 +1,7 @@
 [project]
 name = "stock-recap"
 version = "1.0.0"
-description = "企业级 A 股日终复盘/次日策略智能体"
+description = "Agent Platform：多智能体运行平台（CLI/HTTP/调度/IM）。内置 stock-recap（A 股日终复盘/次日策略）与 hsk30-tutor（HSK 3.0 中文陪练）。"
 requires-python = ">=3.10"
 dependencies = [
     "akshare",
@@ -44,13 +44,17 @@ packages = ["src/agent_platform"]
 #   my_agent = "my_pkg.manifest:register"   # register(AgentRegistry) -> None
 [project.scripts]
 agent_platform = "agent_platform.interfaces.cli:cli_main"
+agent-platform = "agent_platform.interfaces.cli:cli_main"
 stock-recap-mcp = "agent_platform.interfaces.mcp_stdio:main"
-agent_platform-tools-mcp = "agent_platform.tools_server:run_server"
+agent-platform-tools-mcp = "agent_platform.tools_server:run_server"
+agent-platform-qq-bot = "agent_platform.adapters.qq.__main__:main"
+agent-platform-wecom-bot = "agent_platform.adapters.wecom.__main__:main"
 
 # 内置 Agent 通过本 entry_point 自动被 ``runtime.discover_agents`` 发现；
 # ``factory._register_builtin_agents`` 已显式调用一次，两条路径都 OK，便于 editable install。
 [project.entry-points."agent_platform.agents"]
 stock-recap = "agent_platform.agents.stock_recap.manifest:register"
+hsk30-tutor = "agent_platform.agents.hsk30_tutor.manifest:register"
 
 [project.entry-points."agent_platform.prompts"]
 stock-recap = "agent_platform.agents.stock_recap.prompts:bundle_root"

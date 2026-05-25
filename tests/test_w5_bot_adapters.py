@@ -201,13 +201,49 @@ def test_build_botpy_client_dispatches_to_connector(monkeypatch: pytest.MonkeyPa
         channel_id = None
         guild_id = None
 
-        async def reply(self, content):
+        replies: list[str] = []
+
+        async def reply(self, content, msg_seq=1):
+            replies.append(content)
             dispatched.append(f"reply:{content}")
 
     asyncio.run(client.on_group_at_message_create(_Msg()))
     asyncio.run(client.on_c2c_message_create(_Msg()))
     assert "group:x1" in dispatched
     assert "c2c:x1" in dispatched
+
+
+def test_qq_chunked_reply_sends_multiple_parts(monkeypatch: pytest.MonkeyPatch) -> None:
+    from agent_platform.adapters.qq import botpy_client as bc_mod
+
+    sent: list[tuple[str, int | None]] = []
+
+    class _Msg:
+        id = "m1"
+        group_openid = "g1"
+        author = type("A", (), {"user_openid": None})()
+        _api = type(
+            "API",
+            (),
+            {
+                "post_group_message": lambda *a, **k: sent.append(("active", k.get("content", ""))),
+            },
+        )()
+
+        async def reply(self, content, msg_seq=1):
+            sent.append(("passive", content, msg_seq))
+
+    import asyncio
+
+    long_text = "段\n\n" + ("复" * 1200) + "\n\n尾"
+    chunks = __import__(
+        "agent_platform.adapters.reply_chunks", fromlist=["split_reply_chunks"]
+    ).split_reply_chunks(long_text, max_chars=400)
+    asyncio.run(bc_mod._send_chunked_reply(_Msg(), chunks))
+    assert len(sent) >= 2
+    passive = [s for s in sent if s[0] == "passive"]
+    assert passive[0][2] == 1
+    assert passive[-1][2] <= 5
 
 
 # ─── connector.start() 早退路径：未配置时不应 crash ──────────────────────────

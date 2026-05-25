@@ -1,335 +1,156 @@
 # 扩展新 Agent 指导手册
 
-> **本文已更新到 v2 平台化架构。** v1 老路径仍可工作（迁移中），但**新 Agent 必须按 v2 路径添加**。
-> 完整架构见 [`ARCHITECTURE.md`](./ARCHITECTURE.md)。
-
-本文档面向需要在 `agent_platform` 基础上**新增一个业务 Agent** 的开发者。
+> **v2 平台化架构**：新 Agent 必须放在 `src/agent_platform/agents/<id>/`，通过 `AgentDefinition` + `manifest.register` 接入。  
+> 完整分层见 [`ARCHITECTURE.md`](./ARCHITECTURE.md)。内置示例：`stock-recap`、`hsk30-tutor`。
 
 ---
 
 ## 〇、TL;DR（最小新 Agent 5 步）
 
 ```
-1) 新建 src/agent_platform/agents/<id>/
-2) 写 domain/ + 实现 runner (或 Pipeline[StateT] + Phase 子类)
-3) 写 manifest.py，导出 register(reg) → reg.register(AgentDefinition(...))
-4) 在 src/agent_platform/runtime/factory.py 的 _register_builtin_agents 加一行
-   （可选：在 pyproject.toml 的 [project.entry-points."agent_platform.agents"] 追加）
-5) 跑 pytest + lint-imports
+1) 新建 src/agent_platform/agents/<id>/（models · use_case · manifest.py）
+2) 实现 runner（或 Pipeline[StateT] + Phase 子类）
+3) manifest.py：reg.register(AgentDefinition(...))
+4) runtime/factory.py → register_builtin_agents 加一行
+   （可选：pyproject [project.entry-points."agent_platform.agents"])
+5) pytest + uv run lint-imports
 ```
 
-CLI / HTTP / WeCom / QQ / Scheduler 入口**零改动**，自动发现新 Agent。
+在 manifest 中声明 `cli_subparser_factory` / `cli_run_handler` 后，CLI 子命令自动出现；声明 `http_router_factories` 后，`stock-recap --serve` 启动的 API 会自动挂载路由。**无需修改** `adapters/cli/main.py`。
 
 ---
 
-## 一、理解平台分层（v2）
+## 一、平台分层（你要动哪里）
 
-详见 [`ARCHITECTURE.md`](./ARCHITECTURE.md)。要点：
+| 层 | 路径 | 新 Agent 时 |
+|----|------|-------------|
+| `core/` | 契约、Pipeline、Registry | **不改** |
+| `runtime/` | `factory.create_runtime` | 仅在 `register_builtin_agents` 加一行 |
+| `infra/` | LLM、DB、MCP client | 一般不改 |
+| `tools_server/` | MCP 工具 | 仅加新工具时改 |
+| `agents/<id>/` | 业务代码 | ✅ 全部在这里 |
+| `adapters/` | CLI / HTTP / QQ / 调度 | 一般不改 |
 
-| 层 | 角色 | 你新增 Agent 时要不要动？ |
-|----|------|---------------------------|
-| `core/` | 平台契约（Ports + Pipeline + Registry + Bus） | **绝不动** |
-| `runtime/` | Composition Root | 仅在 `_register_builtin_agents` 加一行 |
-| `infra/` | 通用技术实现 | 不动（除非引入新 backend） |
-| `tools_server/` | MCP 工具服务 | 仅在加新工具时改 |
-| `agents/<id>/` | **你的全部代码住在这里** | ✅ 新建子目录 |
-| `adapters/` | 入口适配器 | 不动 |
-
----
-
-## 二、旧文档保留
-
-```
-src/agent_platform/
-│
-├── ── 通用平台层（所有 Agent 共享，通常不需要修改） ─────────────────────
-│   ├── infrastructure/llm/          LLM 调用、多 backend 适配、tool runner
-│   ├── infrastructure/memory/       向量存储、embedding
-│   ├── infrastructure/push/         推送（微信等）
-│   ├── application/orchestration/   编排引擎（pipeline、context、token budget）
-│   ├── application/memory/          进化记忆管理
-│   ├── observability/               tracing、metrics、structured logging
-│   ├── policy/                      guardrails、output_rules
-│   └── config/settings.py           全局配置（环境变量驱动）
-│
-├── ── 平台 CLI 分发器 ────────────────────────────────────────────────
-│   └── interfaces/cli.py            读取 AGENTS 字典，将子命令分发到各 agent
-│
-└── ── 业务层（每个 Agent 各自拥有） ────────────────────────────────────
-    ├── domain/<agent>.py            领域模型（输入/输出结构、业务规则）
-    ├── infrastructure/data/         业务数据源采集
-    ├── application/<agent>.py       主用例编排（调用平台层 pipeline）
-    ├── skills/<agent>/              Skill 描述（SKILL.md）
-    ├── resources/prompts/           System Prompt 文件
-    ├── interfaces/agents/<agent>_cli.py   CLI 子命令（实现 register_subparser / run）
-    └── interfaces/api/v1/           HTTP 路由（可选）
-```
-
-**原则：新 Agent 只在业务层新增文件 + 在 `interfaces/cli.py` 的 `AGENTS` 字典追加一行注册，
-不修改通用平台层。**
+**Agent 之间禁止互相 import**（`import-linter` 强制）。
 
 ---
 
-## 二、需要新增的文件清单
+## 二、参考实现
 
-最小化实现一个新 Agent 需要以下 7 步：
+| Agent | 目录 | 能力 | 要点 |
+|-------|------|------|------|
+| `stock-recap` | `agents/stock_recap/` | REPORT, STREAMING, SCHEDULED, TOOL_USING | Phase pipeline、skills、MCP 工具名、定时任务 |
+| `hsk30-tutor` | `agents/hsk30_tutor/` | CHAT | 轻量 `chat_completion`、交互 REPL、`POST /v1/hsk30-tutor/chat` |
 
-| 步骤 | 位置 | 说明 |
-|------|------|------|
-| 1 | `skills/<my_agent>/SKILL.md` | 描述 Agent 能力、输入输出格式 |
-| 2 | `domain/my_agent.py` | 定义输入/输出的 Pydantic 模型 |
-| 3 | `infrastructure/data/sources/my_source.py` | 数据采集（若有新数据源）|
-| 4 | `resources/prompts/system_my_agent.md` | System Prompt |
-| 5 | `application/my_agent.py` | 主用例：串联数据→prompt→LLM→输出 |
-| 6 | `interfaces/agents/my_agent_cli.py` | CLI 子命令模块（register_subparser + run）|
-| 7 | `interfaces/api/v1/my_agent.py` | 增加 HTTP 路由（可选）|
-
-外加在 `interfaces/cli.py` 的 `AGENTS` 字典中追加一行注册。
+阅读顺序：`manifest.py` → `use_case.py`（或 `pipeline_v2.py`）→ `cli.py` → `http_routes.py`。
 
 ---
 
-## 三、分步实现指南
-
-### 步骤 1：写 SKILL.md
-
-路径：`src/agent_platform/skills/<my_agent>/SKILL.md`
-
-SKILL 是 Agent 的"说明书"，告诉 LLM 这个 Agent 的职责和 I/O 格式。参考现有示例：
-
-```
-src/agent_platform/skills/a_share_daily_recap/SKILL.md
-src/agent_platform/skills/a_share_strategy_nextday/SKILL.md
-```
-
-最低限度需要包含：
-- **功能描述**：这个 Agent 做什么
-- **输入**：调用时会提供哪些数据
-- **输出格式**：期望 LLM 返回什么结构
-
-Skill 通过 `skills/loader.py` 按 `mode` 自动加载注入到 prompt 中。在 `skills/manifest.json` 中登记即可被自动发现：
-
-```json
-{
-  "skills": [
-    { "mode": "my_agent", "path": "my_agent/SKILL.md" }
-  ]
-}
-```
-
-> 一个 agent 可以有多个 mode（例如 `stock-recap` 就有 `daily` 和 `strategy` 两个 mode）。
-> mode 是「同一个 agent 内不同任务变体」的概念，agent 是「不同业务智能体」的概念。
-
----
-
-### 步骤 2：定义领域模型
-
-路径：`src/agent_platform/domain/my_agent.py`
+## 三、manifest 最小示例
 
 ```python
-from pydantic import BaseModel, Field
+from agent_platform.core.registry.agent_definition import (
+    AgentDefinition,
+    AgentCapability,
+    AgentRequestEnvelope,
+    AgentResponseEnvelope,
+)
+from agent_platform.core.registry.agent_registry import AgentRegistry
 
-class MyAgentInput(BaseModel):
-    """传给 Agent 的输入数据"""
-    topic: str
-    extra_context: str = ""
+AGENT_ID = "my-agent"
 
-class MyAgentOutput(BaseModel):
-    """Agent 生成的输出"""
-    summary: str
-    recommendations: list[str] = Field(default_factory=list)
+def _runner(*, envelope, principal, session, run_ctx, settings, runtime):
+    # envelope.payload → 业务逻辑 → AgentResponseEnvelope
+    ...
+
+def register(registry: AgentRegistry) -> None:
+    registry.register(
+        AgentDefinition(
+            id=AGENT_ID,
+            display_name="My Agent",
+            description="...",
+            request_model=MyRequest,
+            response_model=MyResponse,
+            capabilities=[AgentCapability.CHAT],
+            runner=_runner,
+            cli_help="一句话 help",
+            http_path_prefix="/v1/my-agent",
+            cli_subparser_factory=_cli_subparser,  # agents/my_agent/cli.py
+            cli_run_handler=_cli_run,
+            http_router_factories=[lambda: [my_router]],
+        )
+    )
 ```
 
-使用 Pydantic 模型而非 dict，便于类型检查和序列化。
-
----
-
-### 步骤 3：实现数据采集（可选）
-
-路径：`src/agent_platform/infrastructure/data/sources/my_source.py`
-
-若新 Agent 需要外部数据，在此实现采集逻辑。实现 `domain/data_providers.py` 中定义的协议接口，以便可以注入 mock 数据用于测试：
-
-```python
-from agent_platform.domain.data_providers import SomeDataProtocol
-
-class MyDataSource:
-    def fetch(self) -> dict:
-        ...
-```
-
----
-
-### 步骤 4：写 System Prompt
-
-路径：`src/agent_platform/resources/prompts/system_my_agent.md`
-
-用 Markdown 写 System Prompt，支持模板变量（`{{ variable }}`）。在 `resources/prompts/manifest.json` 中登记：
-
-```json
-{
-  "prompts": [
-    { "mode": "my_agent", "system": "system_my_agent.md" }
-  ]
-}
-```
-
----
-
-### 步骤 5：实现主用例
-
-路径：`src/agent_platform/application/my_agent.py`
-
-这里串联数据采集 → 构建 prompt → 调用 LLM → 处理输出。**直接复用平台层的 pipeline 和工具**，不需要重新实现：
-
-```python
-from agent_platform.agents.stock_recap.legacy_pipeline import run_pipeline
-from agent_platform.agents.stock_recap.recap_state import RunContext
-from agent_platform.agents.stock_recap.llm.prompts import build_messages
-from agent_platform.config.settings import Settings
-
-async def run_my_agent(settings: Settings, mode: str = "my_agent") -> str:
-    data = MyDataSource().fetch()
-
-    ctx = RunContext(mode=mode, settings=settings)
-    messages = build_messages(ctx, data=data)
-
-    result = await run_pipeline(ctx, messages)
-
-    return result.content
-```
-
----
-
-### 步骤 6：实现 CLI 子命令模块
-
-路径：`src/agent_platform/interfaces/agents/my_agent_cli.py`
-
-每个 agent 在 `interfaces/agents/` 下有自己独立的 CLI 模块，**只需实现两个函数**：
-
-```python
-"""我的 Agent — 一句话描述（会被父 parser 当作 help 文本）"""
-from __future__ import annotations
-
-import argparse
-import asyncio
-
-from agent_platform.application.my_agent import run_my_agent
-from agent_platform.config.settings import Settings
-
-
-def register_subparser(sub: argparse.ArgumentParser) -> None:
-    """向平台分发器注册该 agent 的所有 argparse 参数。"""
-    sub.add_argument("--topic", required=True, help="本次任务主题")
-    sub.add_argument("--provider", default="mock", choices=["mock", "live"])
-    sub.add_argument("--no-llm", action="store_true")
-
-
-def run(
-    args: argparse.Namespace,
-    settings: Settings,
-    parser: argparse.ArgumentParser,
-) -> int:
-    """执行 agent，返回进程 exit code。"""
-    result = asyncio.run(run_my_agent(settings))
-    print(result)
-    return 0
-```
-
-参考完整示例：[interfaces/agents/stock_recap_cli.py](../src/agent_platform/interfaces/agents/stock_recap_cli.py)
-
-接着在平台分发器 [interfaces/cli.py](../src/agent_platform/interfaces/cli.py) 的 `AGENTS` 字典里追加一行：
-
-```python
-from agent_platform.interfaces.agents import my_agent_cli, stock_recap_cli
-
-AGENTS: dict[str, Any] = {
-    "stock-recap": stock_recap_cli,
-    "my-agent": my_agent_cli,   # ← 新增
-}
-```
-
-调用方式：
+注册后验证：
 
 ```bash
-uv run agent_platform my-agent --topic "本周科技行情" --provider mock
-uv run agent_platform my-agent --help
+uv run agent-platform --list-agents
+uv run agent-platform my-agent --help
 ```
 
 ---
 
-### 步骤 7：添加 HTTP 路由（可选）
+## 四、Skills / Prompts（stock-recap 模式）
 
-路径：`src/agent_platform/interfaces/api/v1/my_agent.py`
+- Skill 放在 **`agents/stock_recap/skills/<name>/SKILL.md`**，由 entry_point `agent_platform.skills` 或包内 manifest 发现。
+- System prompt 放在 **`agents/stock_recap/prompts/`** 或 `resources/prompts/`，entry_point `agent_platform.prompts`。
 
-```python
-from fastapi import APIRouter, Depends
-from agent_platform.application.my_agent import run_my_agent
-from agent_platform.interfaces.api.deps import get_settings
-
-router = APIRouter(prefix="/v1/my-agent", tags=["my-agent"])
-
-@router.post("/run")
-async def run(settings=Depends(get_settings)):
-    result = await run_my_agent(settings)
-    return {"result": result}
-```
-
-在 `interfaces/api/routes.py` 中注册这个 router 即可。
+对话类 Agent（如 `hsk30-tutor`）可在包内 `prompts.py` 直接拼装 system 文本，不必走 Skill manifest。
 
 ---
 
-## 四、测试策略
+## 五、HTTP
 
-新 Agent 的测试跟着同样的分层：
+1. 在 `agents/<id>/http_routes.py` 定义 `APIRouter`。
+2. 在 manifest 的 `http_router_factories` 返回该 router 列表。
+3. `interfaces/api/app.py` 的 `create_app()` 会遍历 `AgentRegistry` 自动 `include_router`。
 
-| 测试类型 | 建议路径 | 要点 |
-|----------|----------|------|
-| 单元测试 | `tests/test_my_agent.py` | 用 `--provider mock` 或直接 monkeypatch 数据源 |
-| Prompt 测试 | `tests/test_my_agent_prompt.py` | 验证 `build_messages()` 输出的内容和结构 |
-| CLI 测试 | `tests/test_my_agent_cli.py` | `register_subparser` 注册的参数符合预期；`run()` 在 mock provider 下能正常返回 0 |
-| 集成测试 | `tests/test_my_agent_integration.py` | 用 `provider=mock` 跑完整 pipeline |
-
-参考现有测试：`tests/test_recap_audit.py`、`tests/test_prompt_experiments.py`。
+鉴权与限流复用 `interfaces/api/deps.py` 的 `require_api_key` / `require_rate_limit`（全局 `RECAP_API_KEY`）。
 
 ---
 
-## 五、注意事项
+## 六、CLI 交互模式
 
-1. **不要修改通用平台层**。如果发现通用层有不满足需求之处，优先考虑通过**依赖注入**或**协议扩展**解决，而不是直接修改。
-
-2. **agent 名遵循 kebab-case**。CLI 子命令名建议短横线分隔（如 `stock-recap`、`news-digest`），与 `pyproject.toml` 风格一致；Python 模块名仍用下划线（`stock_recap_cli.py`）。
-
-3. **配置项用新的环境变量前缀**。在 `config/settings.py` 里为新 Agent 的专属配置加前缀（如 `MY_AGENT_XXX`），避免与现有配置污染。
-
-4. **Skill 是首要设计文档**。先写好 `SKILL.md`，描述清楚输入输出，再写代码，顺序不要反。
-
-5. **用 mock provider 先跑通**。在接入真实数据源前，用 `--provider mock` 验证整个流程是否畅通。
-
-6. **遵循领域边界**。新 Agent 的 domain 模型不要依赖其他 Agent 的 domain 模型；共用结构放到 `domain/shared.py` 或提取到更通用的名称。
-
-7. **`--mcp-tools` 是平台级能力**。它在 `interfaces/cli.py` 顶层，不在任何 agent 子命令下；新 agent 要暴露 MCP 工具时通过 `infrastructure/tools/` 注册即可。
+平台提供 `adapters/cli/repl.py` 的 `run_repl`。`hsk30-tutor` 与 `stock-recap` 默认进入 REPL；脚本单轮用 `--once` 或 `-m` + `--once`。
 
 ---
 
-## 六、完整文件变动对照表
+## 七、测试
 
-以下是新增一个名为 `news-digest`（新闻摘要）Agent 的完整文件清单示例：
+| 类型 | 建议 |
+|------|------|
+| 单元 | `tests/test_<agent>_*.py`，mock LLM / 数据源 |
+| CLI | 断言 `register_subparser` 参数；`--once` + mock 返回码 0 |
+| HTTP | `TestClient` 调 `/v1/<prefix>/...` |
+
+---
+
+## 八、注意事项
+
+1. **不要改 `core/`**，扩展用 Port 或新 infra 实现。
+2. **Agent ID 用 kebab-case**（`my-agent`），Python 包名用下划线（`my_agent`）。
+3. **配置**：复用 `RECAP_*` 全局项，或后续为专属 Agent 增加带前缀的 Settings 字段（避免与 recap 冲突）。
+4. **第三方包**：wheel 里声明 `[project.entry-points."agent_platform.agents"]` 即可被 `discover_agents()` 加载，不必改本仓库 `factory.py`。
+
+---
+
+## 九、文件清单示例（`news-digest`）
 
 ```
-新增文件（8 个）：
-  src/agent_platform/skills/news_digest/SKILL.md
-  src/agent_platform/domain/news_digest.py
-  src/agent_platform/infrastructure/data/sources/news_feed.py
-  src/agent_platform/resources/prompts/system_news_digest.md
-  src/agent_platform/application/news_digest.py
-  src/agent_platform/interfaces/agents/news_digest_cli.py
-  src/agent_platform/interfaces/api/v1/news_digest.py
+新增：
+  src/agent_platform/agents/news_digest/
+    __init__.py
+    models.py
+    use_case.py
+    manifest.py
+    cli.py
+    http_routes.py          # 可选
   tests/test_news_digest.py
 
-修改文件（3 个）：
-  src/agent_platform/skills/manifest.json             (+1 行)
-  src/agent_platform/resources/prompts/manifest.json  (+1 行)
-  src/agent_platform/interfaces/cli.py                (+2 行：import + AGENTS 字典追加一行)
+修改：
+  src/agent_platform/runtime/factory.py   # register_builtin_agents 一行
+  pyproject.toml                            # 可选 entry_points
 ```
 
-**没有任何文件需要被复制或删除。**
+**不要**再创建 `interfaces/agents/`、`application/` 或修改 `AGENTS` 字典——这些路径已在 W16 删除。

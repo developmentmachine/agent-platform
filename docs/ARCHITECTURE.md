@@ -14,7 +14,14 @@
 - 工具走 MCP：进程内不再有 function-calling 私有注册表（迁移分阶段进行）；
 - 插件化：Agent、Skill、Tool、LLM 后端均通过 `entry_points` 注册。
 
-`stock-recap` 是平台上的**第一个**业务 Agent，验证整套平台契约。
+当前内置业务 Agent：
+
+| ID | 包路径 | 能力概要 |
+|----|--------|----------|
+| `stock-recap` | `agents/stock_recap/` | 报告、NDJSON 流、定时任务、MCP 工具、Skills |
+| `hsk30-tutor` | `agents/hsk30_tutor/` | HSK 3.0 多轮对话陪练（CHAT） |
+
+`stock-recap` 是第一个完整验证平台契约的 Agent；`hsk30-tutor`（W17）验证第二 Agent 的 CLI/HTTP 自动装配与业务隔离。
 
 ---
 

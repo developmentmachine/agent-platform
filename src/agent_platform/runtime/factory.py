@@ -68,12 +68,21 @@ def create_runtime(
 
 def _register_builtin_agents(reg: AgentRegistry) -> None:
     """显式注册仓库内 Agent（避免 entry_points 在 editable install 下偶发失效）。"""
-    try:
-        from agent_platform.agents.stock_recap import manifest as stock_recap_manifest
+    for name, mod_path in (
+        ("stock_recap", "agent_platform.agents.stock_recap.manifest"),
+        ("hsk30_tutor", "agent_platform.agents.hsk30_tutor.manifest"),
+    ):
+        try:
+            import importlib
 
-        stock_recap_manifest.register(reg)
-    except Exception as e:
-        logger.warning("failed to register builtin agent stock_recap: %s", e)
+            importlib.import_module(mod_path).register(reg)
+        except Exception as e:
+            logger.warning("failed to register builtin agent %s: %s", name, e)
 
 
-__all__ = ["create_runtime"]
+def register_builtin_agents(reg: AgentRegistry) -> None:
+    """供测试显式装配注册表（与 ``create_runtime(register_builtins=True)`` 一致）。"""
+    _register_builtin_agents(reg)
+
+
+__all__ = ["create_runtime", "register_builtin_agents"]

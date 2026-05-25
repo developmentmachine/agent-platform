@@ -213,6 +213,22 @@ class Settings(BaseSettings):
         ),
     )
 
+    # QQ Bot（botpy 长连接，见 ``adapters.qq``）
+    qq_bot_enabled: bool = Field(default=True, alias="QQ_BOT_ENABLED")
+    qq_bot_app_id: Optional[str] = Field(default=None, alias="QQ_BOT_APP_ID")
+    qq_bot_client_secret: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("QQ_BOT_CLIENT_SECRET", "QQ_BOT_APP_SECRET"),
+    )
+    qq_bot_user_id: Optional[str] = Field(default=None, alias="QQ_BOT_USER_ID")
+    qq_default_agent_id: str = Field(default="stock-recap", alias="QQ_DEFAULT_AGENT_ID")
+    qq_bot_recap_provider: str = Field(default="live", alias="QQ_BOT_RECAP_PROVIDER")
+    qq_bot_recap_force_llm: bool = Field(default=True, alias="QQ_BOT_RECAP_FORCE_LLM")
+    qq_bot_recap_model: Optional[str] = Field(default=None, alias="QQ_BOT_RECAP_MODEL")
+    qq_bot_recap_skip_trading_check: bool = Field(
+        default=False, alias="QQ_BOT_RECAP_SKIP_TRADING_CHECK"
+    )
+
     # Outbox（pending_actions）周期 sweep 间隔（秒）；最小 15s。
     outbox_sweep_interval_seconds: int = Field(
         default=60,
