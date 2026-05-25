@@ -1,7 +1,7 @@
 [project]
 name = "stock-recap"
 version = "1.0.0"
-description = "企业级 A 股日终复盘/次日策略智能体"
+description = "Agent Platform：多智能体运行平台（CLI/HTTP/调度/IM）。内置 stock-recap（A 股日终复盘/次日策略）与 hsk30-tutor（HSK 3.0 中文陪练）。"
 requires-python = ">=3.10"
 dependencies = [
     "akshare",
