@@ -23,8 +23,8 @@ from agent_platform.agents.stock_recap.state import RecapRunState
 from agent_platform.agents.stock_recap.recap_state import RecapAgentRunState
 from agent_platform.agents.stock_recap.legacy_pipeline import execute_recap_pipeline
 from agent_platform.config.settings import Settings
-from agent_platform.core.domain.models import GenerateRequest
-from agent_platform.core.runtime.run_context import RunContext
+from agent_platform.domain.models import GenerateRequest
+from agent_platform.domain.run_context import RunContext
 
 
 def _settings(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Settings:
@@ -38,7 +38,7 @@ def _settings(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Settings:
         "RECAP_WECOM_USE_SIDECAR": "false",
     }.items():
         monkeypatch.setenv(k, v)
-    from agent_platform.infra.persistence.db import init_db
+    from agent_platform.infrastructure.persistence.db import init_db
 
     s = Settings()
     init_db(s.db_path)
@@ -81,15 +81,15 @@ def test_each_phase_satisfies_core_phase_protocol() -> None:
 def test_phase_run_delegates_to_legacy_function(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
-    """PerceivePhase.run 必须走 phases.perceive.run。"""
-    from agent_platform.agents.stock_recap.phases import perceive
+    """PerceivePhase.run 必须调用历史 _phase_perceive。"""
+    from agent_platform.agents.stock_recap import legacy_pipeline as legacy
 
     called: List[Tuple[str, object]] = []
 
     def _spy(state, tracer):
         called.append(("perceive", state))
 
-    monkeypatch.setattr(perceive, "run", _spy)
+    monkeypatch.setattr(legacy, "_phase_perceive", _spy)
     s = _settings(monkeypatch, tmp_path)
     state = RecapAgentRunState(
         request=GenerateRequest(mode="daily", provider="mock", force_llm=False),
@@ -174,38 +174,3 @@ def test_iter_ndjson_v2_emits_meta_phases_result(
         "index_memory",
         "reflect",
     ]
-
-
-def test_use_case_routes_pipeline_v2_flag(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
-    from agent_platform.agents.stock_recap import use_case as uc
-
-    s = _settings(monkeypatch, tmp_path)
-    req = GenerateRequest(mode="daily", provider="mock", force_llm=False)
-    calls: list[str] = []
-
-    from unittest.mock import MagicMock
-
-    monkeypatch.setattr(uc, "validate_generate_request", lambda _req: None)
-    monkeypatch.setattr(uc, "configure_tracing", lambda _s: None)
-
-    def _stub_v2(_state):
-        calls.append("v2")
-        return MagicMock(request_id="v2")
-
-    def _stub_legacy(_state):
-        calls.append("legacy")
-        return MagicMock(request_id="legacy")
-
-    monkeypatch.setattr(uc, "execute_v2", _stub_v2)
-    monkeypatch.setattr(uc, "execute_recap_pipeline", _stub_legacy)
-
-    monkeypatch.setenv("RECAP_PIPELINE_V2", "true")
-    uc.generate_once(req, Settings())
-    assert calls == ["v2"]
-
-    calls.clear()
-    monkeypatch.setenv("RECAP_PIPELINE_V2", "false")
-    uc.generate_once(req, Settings())
-    assert calls == ["legacy"]

@@ -14,8 +14,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from agent_platform.core.domain.data_providers import DataProviderRegistry, DataProviderSpec
-from agent_platform.core.domain.models import MarketSnapshot
+from agent_platform.domain.data_providers import DataProviderRegistry, DataProviderSpec
+from agent_platform.domain.models import MarketSnapshot
 
 logger = logging.getLogger("agent_platform.collector")
 

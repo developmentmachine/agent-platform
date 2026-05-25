@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
-from agent_platform.core.domain.models import (
+from agent_platform.domain.models import (
     BacktestResult,
     Features,
     MarketSnapshot,
@@ -127,7 +127,7 @@ def compute_backtest(
     scoring_impl: Optional[str] = None,
 ) -> BacktestResult:
     """对比策略预测与实际板块表现；评分器由 ``RECAP_BACKTEST_SCORING`` 或参数选择。"""
-    from agent_platform.agents.stock_recap.backtest.registry import resolve_backtest_strategy
+    from agent_platform.application.backtest.registry import resolve_backtest_strategy
     from agent_platform.config.settings import get_settings
 
     name = (scoring_impl or get_settings().backtest_scoring or "keyword_substring").strip().lower()

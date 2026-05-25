@@ -28,7 +28,7 @@ from agent_platform.core.registry.agent_registry import AgentRegistry
 from agent_platform.core.runtime.principal import PrincipalContext
 from agent_platform.core.runtime.run_context import RunContext
 from agent_platform.core.runtime.session import SessionContext
-from agent_platform.core.domain.models import GenerateRequest, GenerateResponse
+from agent_platform.domain.models import GenerateRequest, GenerateResponse
 
 logger = logging.getLogger("agent_platform.agents.stock_recap.manifest")
 
@@ -49,11 +49,6 @@ def _runner(
     if envelope.stream:
         return _stream(req, settings, run_ctx)
     resp: GenerateResponse = generate_once(req, settings, ctx=run_ctx)
-    errors: List[str] = []
-    if resp.error:
-        errors.append(resp.error)
-    elif resp.recap is None and req.force_llm:
-        errors.append("generate_failed: no recap produced")
     return AgentResponseEnvelope(
         agent_id=AGENT_ID,
         request_id=run_ctx.request_id,
@@ -62,7 +57,7 @@ def _runner(
             "markdown": resp.rendered_markdown or "",
             "wechat_text": resp.rendered_wechat_text or "",
         },
-        errors=errors,
+        errors=[resp.error] if resp.error else [],
     )
 
 
@@ -141,7 +136,7 @@ def _write_output_files(
 def _scheduled_handler(mode: str, settings: Any) -> None:
     """统一的 cron handler — daily_recap / strategy 都走这条。"""
     from agent_platform.agents.stock_recap.use_case import generate_once
-    from agent_platform.infra.persistence.db import init_db
+    from agent_platform.infrastructure.persistence.db import init_db
 
     if not _is_trading_today():
         logger.info(_stable_json({"event": "scheduler_skip", "job": f"recap_{mode}", "reason": "non_trading_day"}))

@@ -8,7 +8,7 @@
 """
 from __future__ import annotations
 
-from agent_platform.core.domain.models import (
+from agent_platform.domain.models import (
     RecapDaily,
     RecapDailySection,
     RecapStrategy,

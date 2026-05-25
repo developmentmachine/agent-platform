@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional, Set
 from agent_platform.config.settings import Settings
 from agent_platform.core.ports.mcp_tool import McpClientPort, McpToolDescriptor
 from agent_platform.core.runtime.contextvars import current_budget, current_run_context
-from agent_platform.infra.guardrail.tools import (
+from agent_platform.policy.tools import (
     ToolBudgetExceeded,
     ToolDisabled,
     ToolForbidden,
@@ -56,9 +56,18 @@ _SETTINGS_TOOL_FLAGS: Dict[str, str] = {
 
 
 def _resolve_principal_role(settings: Settings) -> str:
-    """``current_principal.role`` → ``Settings.principal_role``。"""
+    """优先使用 ``current_principal.role``（W1 新增）；其次 ``domain.principal``；
+    最后回落 ``Settings.principal_role``，与历史行为一致。"""
     try:
-        from agent_platform.core.runtime.principal import get_principal
+        from agent_platform.core.runtime.contextvars import current_principal
+
+        principal = current_principal.get()
+        if principal is not None and (principal.role or "").strip():
+            return principal.role
+    except Exception:
+        pass
+    try:
+        from agent_platform.domain.principal import get_principal
 
         role = (get_principal().role or "").strip()
         if role:
@@ -70,7 +79,15 @@ def _resolve_principal_role(settings: Settings) -> str:
 
 def _resolve_tenant_id() -> Optional[str]:
     try:
-        from agent_platform.core.runtime.principal import get_principal
+        from agent_platform.core.runtime.contextvars import current_principal
+
+        principal = current_principal.get()
+        if principal is not None and principal.tenant_id:
+            return principal.tenant_id
+    except Exception:
+        pass
+    try:
+        from agent_platform.domain.principal import get_principal
 
         tid = get_principal().tenant_id
         if tid:
@@ -489,13 +506,13 @@ class McpToolGateway:
         error: Optional[str],
         tenant_id: Optional[str] = None,
     ) -> None:
-        from agent_platform.runtime.observability.metrics import record_tool_invocation
+        from agent_platform.observability.metrics import record_tool_invocation
 
         record_tool_invocation(tool_name, status)
         if not self._settings.tool_audit_enabled:
             return
         try:
-            from agent_platform.infra.persistence.db import insert_tool_invocation
+            from agent_platform.infrastructure.persistence.db import insert_tool_invocation
 
             insert_tool_invocation(
                 self._settings.db_path,

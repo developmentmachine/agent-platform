@@ -18,12 +18,12 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from agent_platform.config.settings import Settings
-from agent_platform.core.domain.models import Recap
-from agent_platform.infra.persistence.db import (
+from agent_platform.domain.models import Recap
+from agent_platform.infrastructure.persistence.db import (
     get_push_log,
     upsert_push_log,
 )
-from agent_platform.infra.push import get_push_provider
+from agent_platform.infrastructure.push import get_push_provider
 
 logger = logging.getLogger("agent_platform.side_effects.push")
 

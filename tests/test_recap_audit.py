@@ -15,8 +15,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agent_platform.config.settings import Settings
-from agent_platform.core.domain.models import LlmTokens, RecapDaily, RecapDailySection
-from agent_platform.infra.persistence.db import (
+from agent_platform.domain.models import LlmTokens, RecapDaily, RecapDailySection
+from agent_platform.infrastructure.persistence.db import (
     init_db,
     insert_recap_audit,
     load_recap_audit,
@@ -146,7 +146,7 @@ def test_pipeline_writes_audit_when_enabled(tmp_path, monkeypatch):
     settings = _settings_mod.Settings()
     init_db(settings.db_path)
 
-    from agent_platform.core.domain.models import GenerateRequest
+    from agent_platform.domain.models import GenerateRequest
 
     req = GenerateRequest(
         mode="daily",
@@ -173,7 +173,7 @@ def test_pipeline_skips_audit_when_disabled(tmp_path, monkeypatch):
 
     from agent_platform.agents.stock_recap.use_case import generate_once
     import agent_platform.config.settings as _settings_mod
-    from agent_platform.core.domain.models import GenerateRequest
+    from agent_platform.domain.models import GenerateRequest
 
     _settings_mod._settings_instance = None  # noqa: SLF001
     settings = _settings_mod.Settings()
@@ -209,7 +209,7 @@ def test_audit_endpoint_get_by_id(tmp_path, monkeypatch):
         critic_retries_used=0,
     )
 
-    from agent_platform.adapters.http.api.app import create_app
+    from agent_platform.interfaces.api.app import create_app
 
     client = TestClient(create_app())
 
@@ -246,7 +246,7 @@ def test_audit_endpoint_list_filter_by_mode(tmp_path, monkeypatch):
             critic_retries_used=0,
         )
 
-    from agent_platform.adapters.http.api.app import create_app
+    from agent_platform.interfaces.api.app import create_app
 
     client = TestClient(create_app())
     r = client.get("/v1/audit?mode=daily&limit=10", headers={"X-API-Key": "test-key"})

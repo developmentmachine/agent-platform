@@ -5,8 +5,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 import agent_platform.config.settings as settings_module
-from agent_platform.core.domain.models import GenerateRequest
-from agent_platform.adapters.http.api.routes import app
+from agent_platform.domain.models import GenerateRequest
+from agent_platform.interfaces.api.routes import app
 
 
 @pytest.fixture
@@ -69,7 +69,7 @@ def test_recap_stream_error_event_on_phase_failure(
         raise RuntimeError("stream_phase_boom")
 
     monkeypatch.setattr(
-        "agent_platform.agents.stock_recap.phases.perceive.run",
+        "agent_platform.agents.stock_recap.legacy_pipeline.collect_snapshot",
         boom,
     )
     lines: list[str] = []

@@ -5,7 +5,7 @@ import re
 import unicodedata
 from typing import List
 
-from agent_platform.core.domain.models import BacktestResult, MarketSnapshot, RecapStrategy
+from agent_platform.domain.models import BacktestResult, MarketSnapshot, RecapStrategy
 
 
 def _top_sector_names(actual_snapshot: MarketSnapshot) -> List[str]:

@@ -32,6 +32,3 @@ htmlcov/
 # stock-recap CLI 默认输出（勿提交）
 recap_*.md
 recap_*_wechat.txt
-
-# QQ botpy 运行日志
-botpy.log

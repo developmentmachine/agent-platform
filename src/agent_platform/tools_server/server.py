@@ -1,6 +1,6 @@
 """tools_server 独立 MCP server 入口（W2 起从 ``tools_server.registry`` 自动注册）。
 
-Cursor / Claude Desktop / 任何 MCP 宿主指向本入口（``agent-platform-tools-mcp``
+Cursor / Claude Desktop / 任何 MCP 宿主指向本入口（``agent_platform-tools-mcp``
 或 ``stock-recap-mcp``），即可获得平台所有工具。
 
 注意：stdio 下 **stdout 仅允许 JSON-RPC**；日志只能走 stderr。

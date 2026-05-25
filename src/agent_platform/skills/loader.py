@@ -32,7 +32,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from agent_platform.core.domain.models import Mode
+from agent_platform.domain.models import Mode
 
 logger = logging.getLogger("agent_platform.skills.loader")
 

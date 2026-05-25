@@ -41,7 +41,7 @@ def create_runtime(
     reg = registry or get_default_registry()
 
     if register_builtins:
-        register_builtin_agents(reg)
+        _register_builtin_agents(reg)
 
     if auto_discover:
         discover_agents(reg)
@@ -66,7 +66,7 @@ def create_runtime(
     return runtime
 
 
-def register_builtin_agents(reg: AgentRegistry) -> None:
+def _register_builtin_agents(reg: AgentRegistry) -> None:
     """显式注册仓库内 Agent（避免 entry_points 在 editable install 下偶发失效）。"""
     try:
         from agent_platform.agents.stock_recap import manifest as stock_recap_manifest
@@ -74,15 +74,6 @@ def register_builtin_agents(reg: AgentRegistry) -> None:
         stock_recap_manifest.register(reg)
     except Exception as e:
         logger.warning("failed to register builtin agent stock_recap: %s", e)
-    try:
-        from agent_platform.agents.hsk30_tutor import manifest as hsk30_tutor_manifest
-
-        hsk30_tutor_manifest.register(reg)
-    except Exception as e:
-        logger.warning("failed to register builtin agent hsk30_tutor: %s", e)
 
 
-_register_builtin_agents = register_builtin_agents  # 内部别名
-
-
-__all__ = ["create_runtime", "register_builtin_agents"]
+__all__ = ["create_runtime"]

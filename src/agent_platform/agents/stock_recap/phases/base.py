@@ -13,8 +13,8 @@ from typing import Iterator
 
 from agent_platform.agents.stock_recap.state import RecapRunState
 from agent_platform.core.orchestration.stream_events import StreamEvent, StreamEventKind
-from agent_platform.runtime.observability.metrics import record_phase_duration
-from agent_platform.runtime.observability.tracing import get_tracer
+from agent_platform.observability.metrics import record_phase_duration
+from agent_platform.observability.tracing import get_tracer
 
 
 class RecapPhase:

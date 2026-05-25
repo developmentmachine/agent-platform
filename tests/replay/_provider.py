@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from agent_platform.config.settings import Settings
-from agent_platform.core.domain.models import LlmTokens, Mode, Recap
+from agent_platform.domain.models import LlmTokens, Mode, Recap
 
 
 @dataclass

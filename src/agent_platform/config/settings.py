@@ -159,7 +159,7 @@ class Settings(BaseSettings):
         description="可选；未设时使用环境变量 OTEL_EXPORTER_OTLP_ENDPOINT",
     )
 
-    # LLM function calling（进程内 OpenAI/Ollama 工具循环；独立 MCP 见 agent_platform.adapters.mcp_stdio.main）
+    # LLM function calling（进程内 OpenAI/Ollama 工具循环；独立 MCP 见 agent_platform.interfaces.mcp_stdio）
     tools_enabled: bool = Field(default=False, alias="RECAP_TOOLS_ENABLED")
     tools_web_search: bool = Field(default=True, alias="RECAP_TOOLS_WEB_SEARCH")
     tools_market_data: bool = Field(default=True, alias="RECAP_TOOLS_MARKET_DATA")
@@ -211,30 +211,6 @@ class Settings(BaseSettings):
             "Critic 重入次数：业务异常（schema/parse 校验失败）发生时，把结构化反馈塞回 "
             "messages 再调一次 LLM。设 0 关闭。"
         ),
-    )
-    pipeline_v2: bool = Field(
-        default=True,
-        alias="RECAP_PIPELINE_V2",
-        description=(
-            "为 true 时 generate/stream 走 Phase 类编排（pipeline_v2）；"
-            "false 时回退 legacy_pipeline（排障对比用）。"
-        ),
-    )
-
-    # QQ Bot（botpy 长连接，见 ``adapters.qq``）
-    qq_bot_enabled: bool = Field(default=True, alias="QQ_BOT_ENABLED")
-    qq_bot_app_id: Optional[str] = Field(default=None, alias="QQ_BOT_APP_ID")
-    qq_bot_client_secret: Optional[str] = Field(
-        default=None,
-        validation_alias=AliasChoices("QQ_BOT_CLIENT_SECRET", "QQ_BOT_APP_SECRET"),
-    )
-    qq_bot_user_id: Optional[str] = Field(default=None, alias="QQ_BOT_USER_ID")
-    qq_default_agent_id: str = Field(default="stock-recap", alias="QQ_DEFAULT_AGENT_ID")
-    qq_bot_recap_provider: str = Field(default="live", alias="QQ_BOT_RECAP_PROVIDER")
-    qq_bot_recap_force_llm: bool = Field(default=True, alias="QQ_BOT_RECAP_FORCE_LLM")
-    qq_bot_recap_model: Optional[str] = Field(default=None, alias="QQ_BOT_RECAP_MODEL")
-    qq_bot_recap_skip_trading_check: bool = Field(
-        default=False, alias="QQ_BOT_RECAP_SKIP_TRADING_CHECK"
     )
 
     # Outbox（pending_actions）周期 sweep 间隔（秒）；最小 15s。

@@ -21,7 +21,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from agent_platform.infra.persistence.db import (
+from agent_platform.infrastructure.persistence.db import (
     count_runs_since_last_evolution,
     get_active_prompt_version,
     insert_evolution_note,
@@ -33,7 +33,7 @@ from agent_platform.infra.persistence.db import (
     set_active_prompt_version,
 )
 from agent_platform.agents.stock_recap.llm.prompts import PROMPT_BASE_VERSION, pattern_extraction_system
-from agent_platform.core.domain.models import EvolutionNote, Features, MarketSnapshot, Mode
+from agent_platform.domain.models import EvolutionNote, Features, MarketSnapshot, Mode
 
 logger = logging.getLogger("agent_platform.memory")
 
@@ -150,7 +150,7 @@ def _current_tenant_id() -> Optional[str]:
     单租户 / CLI / 周期任务保持 None 行为兼容；HTTP 请求经过 ``require_api_key`` 后会有值。
     """
     try:
-        from agent_platform.runtime.observability.runtime_context import current_run_context
+        from agent_platform.observability.runtime_context import current_run_context
 
         ctx = current_run_context.get()
         if ctx is not None:
@@ -213,7 +213,7 @@ def extract_market_patterns(
     其余情况（用户选了 gemini-cli/cursor-cli/ollama）直接跳过，避免无谓的
     『Model Not Exist』报错与重试浪费。
     """
-    from agent_platform.infra.llm.backends import (
+    from agent_platform.infrastructure.llm.backends import (
         call_llm,
         llm_backend_effective,
     )
@@ -263,7 +263,7 @@ def extract_market_patterns(
 
     # 直接用 openai/ollama 原始调用（不走 Recap schema 校验）
     try:
-        from agent_platform.infra.llm.backends import _stable_json as sj
+        from agent_platform.infrastructure.llm.backends import _stable_json as sj
         import httpx
         from openai import OpenAI
 
@@ -334,7 +334,7 @@ def check_and_run_evolution(
 
     # 进化目前完全依赖 OpenAI structured outputs（client.beta.chat.completions.parse），
     # 当用户主动选择非 openai backend 时直接跳过，避免 'Model Not Exist' 多次重试浪费。
-    from agent_platform.infra.llm.backends import llm_backend_effective
+    from agent_platform.infrastructure.llm.backends import llm_backend_effective
 
     eff_backend = llm_backend_effective(model_spec, settings)
     if eff_backend != "openai" or not getattr(settings, "openai_api_key", None):

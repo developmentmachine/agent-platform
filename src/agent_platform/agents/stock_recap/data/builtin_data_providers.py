@@ -1,7 +1,7 @@
 """装配内置行情 Provider：mock / live / akshare。"""
 from __future__ import annotations
 
-from agent_platform.core.domain.data_providers import DataProviderRegistry, DataProviderSpec
+from agent_platform.domain.data_providers import DataProviderRegistry, DataProviderSpec
 from agent_platform.agents.stock_recap.data.providers.akshare import collect_akshare
 from agent_platform.agents.stock_recap.data.providers.live import collect_live
 from agent_platform.agents.stock_recap.data.providers.mock import collect_mock

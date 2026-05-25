@@ -1,7 +1,10 @@
-"""企业微信 AiBot connector — WebSocket 长连接 + HTTP 回调（webhook）双模式。
+"""企业微信 AiBot connector 骨架（W1：仅类型与协议，无实际 SDK 连接）。
 
-- **长连接**：``start()`` → ``ws_client.run_wecom_ws_loop``（``wss://openws.work.weixin.qq.com``）
-- **短连接**：``adapters/wecom/webhook`` AES 回调（无需公网入站时长连接）
+完整 SDK 接入（WebSocket 长连接 + AES 解密 + access_token 刷新）会在下一个
+commit 实装；本骨架确保：
+- adapter 边界已就绪：仅依赖 ``AgentRuntime``；
+- 入站流程：frame → normalize → dedup → ``runtime.run(...)`` → reply；
+- 出站流程：可选 streaming 时走 ``StreamReplyBuffer``。
 """
 from __future__ import annotations
 
@@ -80,20 +83,10 @@ class WecomAiBotConnector:
         if not (self._opts.bot_id and self._opts.secret):
             logger.warning("wecom aibot connector missing bot_id/secret; not starting")
             return
-        mode = (os.environ.get("WECOM_AIBOT_MODE") or "websocket").strip().lower()
-        if mode in ("webhook", "callback", "http"):
-            logger.info(
-                "wecom mode=%s: 请用 HTTP 服务暴露 /v1/adapters/wecom/callback（见 adapters/wecom/webhook）",
-                mode,
-            )
-            return
-        from agent_platform.adapters.wecom.ws_client import run_wecom_ws_loop
+        # TODO(next-commit): 接入企业微信 AiBot 官方 SDK 或自实现 WebSocket 长连接
+        logger.info("wecom aibot connector scaffolded (SDK integration pending)")
 
-        ws_url = (os.environ.get("WECOM_AIBOT_WS_URL") or "").strip() or None
-        logger.info("wecom aibot websocket connecting (bot_id=%s)", self._opts.bot_id)
-        run_wecom_ws_loop(self, ws_url=ws_url or "wss://openws.work.weixin.qq.com")
-
-    def handle_frame(self, frame: Dict[str, Any], *, send_reply: bool = True) -> Optional[str]:
+    def handle_frame(self, frame: Dict[str, Any]) -> Optional[str]:
         """处理单条入站消息；返回回复文本（或 None）。
 
         生产环境由 SDK 回调驱动；测试 / dev 直接调用本方法即可。
@@ -126,8 +119,7 @@ class WecomAiBotConnector:
             return f"⚠ 抱歉，处理失败：{e}"
 
         rendered = resp.rendered.get("wechat_text") or resp.rendered.get("markdown") or str(resp.payload)
-        if send_reply:
-            self._reply_sender(rendered, {"msg_id": msg_id, "principal": principal.subject})
+        self._reply_sender(rendered, {"msg_id": msg_id, "principal": principal.subject})
         return rendered
 
     # ─── helpers ──────────────────────────────────────────────────────────

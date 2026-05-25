@@ -17,7 +17,7 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-from agent_platform.infra.persistence.db import (
+from agent_platform.infrastructure.persistence.db import (
     load_active_experiment,
     load_experiment_variants,
 )

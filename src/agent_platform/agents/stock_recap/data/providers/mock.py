@@ -5,7 +5,7 @@ import hashlib
 import random
 from typing import Any, Dict
 
-from agent_platform.core.domain.models import MarketSnapshot
+from agent_platform.domain.models import MarketSnapshot
 from agent_platform.agents.stock_recap.data.sources.cross_market import build_cross_market_hints
 from agent_platform.agents.stock_recap.data.sources.forward_watchlist import build_forward_watchlist
 from agent_platform.agents.stock_recap.data.sources.sector import apply_benchmark_excess

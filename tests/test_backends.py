@@ -2,7 +2,7 @@
 import json
 import pytest
 
-from agent_platform.infra.llm.backends import (
+from agent_platform.infrastructure.llm.backends import (
     _interpret_model_spec,
     llm_backend_effective,
     model_effective,

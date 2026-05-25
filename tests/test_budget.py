@@ -15,18 +15,18 @@ from typing import Dict, List, Tuple
 
 import pytest
 
-from agent_platform.core.runtime.budget import AgentBudget
+from agent_platform.application.orchestration.budget import AgentBudget
 from agent_platform.agents.stock_recap.recap_state import RecapAgentRunState
 from agent_platform.agents.stock_recap.legacy_pipeline import _check_budget_between_phases
 from agent_platform.config.settings import Settings
-from agent_platform.core.domain.models import (
+from agent_platform.domain.models import (
     GenerateRequest,
     LlmBudgetExceeded,
     LlmTokens,
     Recap,
 )
-from agent_platform.core.runtime.run_context import RunContext
-from agent_platform.runtime.observability.runtime_context import current_budget
+from agent_platform.domain.run_context import RunContext
+from agent_platform.observability.runtime_context import current_budget
 
 
 _ENV_KEYS = {
@@ -99,7 +99,7 @@ def test_wall_ms_exceed_after_sleep_simulated() -> None:
 def test_tool_runner_increments_via_contextvar(monkeypatch: pytest.MonkeyPatch) -> None:
     """W2: runner 现在委托 ``McpToolGateway``，patch 点改为 gateway 的 _call_sync。"""
     from agent_platform.core.ports.mcp_tool import McpToolResult
-    from agent_platform.infra.tools.runner import RecapToolRunner
+    from agent_platform.infrastructure.tools.runner import RecapToolRunner
     from agent_platform.runtime import mcp_gateway as gw_mod
 
     def _fake_call(self, name, arguments, *, timeout_s=None):
@@ -143,7 +143,7 @@ def test_check_budget_between_phases_skips_act_and_critique(
 def test_act_phase_handles_budget_exceeded_gracefully(monkeypatch: pytest.MonkeyPatch) -> None:
     """provider 抛 ``LlmBudgetExceeded`` 时 act 节点不应让整个 pipeline 崩。"""
     from agent_platform.agents.stock_recap import legacy_pipeline as pipeline_mod
-    from agent_platform.infra.llm import backends as backends_mod
+    from agent_platform.infrastructure.llm import backends as backends_mod
 
     s = _settings(monkeypatch)
     state = RecapAgentRunState(
@@ -154,7 +154,7 @@ def test_act_phase_handles_budget_exceeded_gracefully(monkeypatch: pytest.Monkey
     )
 
     # 给 act 喂上必要的前置状态
-    from agent_platform.core.domain.models import Features, MarketSnapshot
+    from agent_platform.domain.models import Features, MarketSnapshot
 
     state.snapshot = MarketSnapshot(
         asof="2024-01-02T00:00:00+00:00", provider="mock", date="2024-01-02"

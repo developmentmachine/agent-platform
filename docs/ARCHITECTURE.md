@@ -69,8 +69,11 @@
 | `tools_server/` | 独立 MCP server | `server.py` · `handlers/` |
 | `agents/<id>/` | 业务 Agent（互相隔离） | `manifest.py` · `domain/` · `phases/` · `prompts/` · `skills/` |
 | `adapters/` | Driving Adapters | `cli/` · `http/` · `wecom/` · `qq/` · `scheduler/` · `mcp_stdio/` |
+| `application/` 等 | **迁移中：老 4 层路径** | 与 v2 路径并存；后续 commit 逐步迁入 v2 路径 |
 
-> **当前状态**：`infra/*`、`adapters/*`、`runtime/*`（含 `observability`、`jobs`、`side_effects`）、`core/domain/*`、`agents/<id>/` 为唯一顶层包；原 `application/`、`domain/`、`infrastructure/`、`interfaces/`、`policy/`、`observability/`、`presentation/` 等遗留 shim **已删除**（W16）。
+> **当前 commit 的迁移策略**：core / runtime / agents / adapters / tools_server / infra 是**新的规范路径**；
+> infrastructure / interfaces / application / domain / observability / policy / presentation 仍是**真实代码所在**。
+> 两套路径**完全等价**，业务代码与测试无任何破坏。后续 commit 将物理迁移代码并把旧路径转为 shim。
 
 ---
 
@@ -185,19 +188,9 @@ resp = runtime.run(
 | **W2：MCP 物理切换** | `tools_server` 独一真实源；`RecapToolRunner` → `McpToolGateway` | ✅ 已完成 |
 | **W3：recap 物理迁入 `agents/stock_recap/`** | data / llm / effects / prompts / skills / cli / http_routes | ✅ 已完成 |
 | **W4：recap 类化为 `Phase`** | `_phase_*` → Phase 子类；`pipeline_v2` 并行入口 | ✅ 已完成 |
-| **W5：WeCom/QQ SDK 接入** | QQ botpy WS + 企微 AES webhook + 企微 AiBot WebSocket | ✅ 已完成 |
+| **W5：WeCom/QQ SDK 接入** | botpy WS + 企微 AES webhook | ✅ 已完成 |
 | **W6：CLI/HTTP/Scheduler 自动装配** | `AgentRegistry` 驱动，无硬编码 AGENTS | ✅ 已完成 |
 | **W7：删 deprecation shim** | 全库 canonical import；CI `lint-imports` | ✅ 已完成 |
-| **W8：infra / adapters 物理迁移** | `infrastructure/*` → `infra/*`；`interfaces/*` → `adapters/*`；旧路径 shim | ✅ 已完成 |
-| **W9：observability / budget / RunContext** | → `runtime/observability`、`core/runtime/*`；旧路径 shim | ✅ 已完成 |
-| **W10：policy → guardrail** | `policy/` → `infra/guardrail/`（含 `rules.yaml`）；旧路径 shim | ✅ 已完成 |
-| **W11：domain 平台模块** | `domain/models` 等 → `core/domain/*`；`principal` / `run_context` 仍为 shim | ✅ 已完成 |
-| **W12：application 平台代码** | `side_effects` / `jobs` → `runtime/`；`backtest/registry` → `agents/stock_recap/backtest/`；`application/*` shim | ✅ 已完成 |
-| **W13：presentation 收尾** | 展示逻辑在 `agents/<id>/render.py`；`presentation/render` 为 shim | ✅ 已完成 |
-| **W14：Principal 合并** | `domain.principal` 与 `core.runtime.principal` 合一；单一 ContextVar | ✅ 已完成 |
-| **W15：canonical import** | 业务代码统一 `core.runtime` / `runtime` / `agents` 路径；import-linter 禁止遗留顶层包 | ✅ 已完成 |
-| **W16：删除 shim 包** | 物理移除 `application/`、`domain/`、`infrastructure/`、`interfaces/`、`policy/`、顶层 `observability/`、`presentation/` | ✅ 已完成 |
-| **W17：hsk30-tutor** | 第二个 Agent：`CHAT` 陪练 MVP；`agents/hsk30_tutor/` + CLI/HTTP | ✅ 已完成 |
 
 ---
 
@@ -208,15 +201,12 @@ resp = runtime.run(
 | `interfaces/` | `adapters/` | 入口适配器；新增 `wecom/` `qq/` |
 | `application/recap.py` | `agents/stock_recap/manifest.py` 调用 | recap 入口收敛到 Agent manifest |
 | `application/orchestration/` | `core/orchestration/`（泛型）+ `agents/stock_recap/`（recap 专用） | 编排引擎与具体 Agent 解耦 |
-| `application/side_effects/` | `runtime/side_effects/`（outbox/deferred）+ `agents/stock_recap/effects/`（业务动作） | Composition Root 可触达 infra/agents |
-| `application/jobs.py` | `runtime/jobs.py` | 调度/API 共用任务定义 |
-| `application/backtest/registry.py` | `agents/stock_recap/backtest/registry.py` | 策略注册与 recap Agent 绑定 |
-| `domain/` | `core/domain/`（平台模型/仓储/注册表）+ `agents/stock_recap/domain/`（业务类型） | `domain/*` 子路径为 shim |
-| `infrastructure/` | `infra/` | 已物理迁移；`infrastructure/*` 为 shim |
-| `interfaces/` | `adapters/` | 已物理迁移；`interfaces/*` 为 shim |
-| `observability/` | `runtime/observability/` | 旧顶层包为 shim |
-| `policy/` | `infra/guardrail/` | recap 输出规则仍在 `agents/stock_recap/` |
-| `presentation/` | `agents/<id>/render.py` | 例：`agents/stock_recap/render.py`；`presentation/render` 为 shim |
+| `application/side_effects/` | `core/orchestration/side_effects_bus`（机制）+ `agents/stock_recap/effects/`（订阅） | 副作用走总线 |
+| `domain/` | `core/runtime/`（平台类型）+ `agents/stock_recap/domain/`（业务类型） | 拆分中 |
+| `infrastructure/` | `infra/` | 别名等价；后续物理迁移 |
+| `observability/` | `runtime/observability/`（W1 仍保持老路径） | |
+| `policy/` | 通用部分 → `infra/guardrail/`；recap 输出规则 → `agents/stock_recap/` | |
+| `presentation/` | `agents/<id>/render.py`（每 Agent 自带） | |
 | `interfaces/mcp_stdio.py` | `tools_server/server.py` + `adapters/mcp_stdio/` | 工具服务 vs Agent 服务分开 |
 
 ---

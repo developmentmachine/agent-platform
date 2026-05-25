@@ -23,7 +23,6 @@ dependencies = [
     "qq-botpy>=1.2.1",
     "tenacity>=8.3.0",
     "uvicorn[standard]>=0.29.0",
-    "websockets>=12.0",
 ]
 
 [build-system]
@@ -34,7 +33,7 @@ build-backend = "hatchling.build"
 packages = ["src/agent_platform"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"src/agent_platform/infra/guardrail/rules.yaml" = "agent_platform/infra/guardrail/rules.yaml"
+"src/agent_platform/policy/rules.yaml" = "agent_platform/policy/rules.yaml"
 
 # 下游包可扩展 Skills：在 wheel 的 pyproject 中声明
 #   [project.entry-points."agent_platform.skills"]
@@ -44,17 +43,14 @@ packages = ["src/agent_platform"]
 #   [project.entry-points."agent_platform.agents"]
 #   my_agent = "my_pkg.manifest:register"   # register(AgentRegistry) -> None
 [project.scripts]
-agent-platform = "agent_platform.adapters.cli.main:cli_main"
-stock-recap-mcp = "agent_platform.adapters.mcp_stdio.main:main"
-agent-platform-tools-mcp = "agent_platform.tools_server:run_server"
-agent-platform-qq-bot = "agent_platform.adapters.qq.__main__:main"
-agent-platform-wecom-bot = "agent_platform.adapters.wecom.__main__:main"
+agent_platform = "agent_platform.interfaces.cli:cli_main"
+stock-recap-mcp = "agent_platform.interfaces.mcp_stdio:main"
+agent_platform-tools-mcp = "agent_platform.tools_server:run_server"
 
 # 内置 Agent 通过本 entry_point 自动被 ``runtime.discover_agents`` 发现；
 # ``factory._register_builtin_agents`` 已显式调用一次，两条路径都 OK，便于 editable install。
 [project.entry-points."agent_platform.agents"]
 stock-recap = "agent_platform.agents.stock_recap.manifest:register"
-hsk30-tutor = "agent_platform.agents.hsk30_tutor.manifest:register"
 
 [project.entry-points."agent_platform.prompts"]
 stock-recap = "agent_platform.agents.stock_recap.prompts:bundle_root"
@@ -92,10 +88,17 @@ forbidden_modules = [
     "agent_platform.adapters",
     "agent_platform.agents",
     "agent_platform.tools_server",
+    "agent_platform.application",
+    "agent_platform.infrastructure",
+    "agent_platform.interfaces",
+    "agent_platform.presentation",
 ]
-# 例外：core.runtime.contextvars 需读取 runtime.observability 的 ContextVar 槽位。
+# 例外：core.runtime / core.orchestration 暂从 ``observability`` 与
+# ``application.orchestration.budget`` re-export，待物理迁移后取消此例外。
 ignore_imports = [
-    "agent_platform.core.runtime.contextvars -> agent_platform.runtime.observability.runtime_context",
+    "agent_platform.core.runtime.contextvars -> agent_platform.observability.runtime_context",
+    "agent_platform.core.runtime.budget -> agent_platform.application.orchestration.budget",
+    "agent_platform.core.runtime.run_context -> agent_platform.domain.run_context",
 ]
 
 [[tool.importlinter.contracts]]
@@ -115,13 +118,14 @@ source_modules = [
 ]
 forbidden_modules = [
     "agent_platform.infra",
+    "agent_platform.infrastructure",
     "agent_platform.agents",
+    "agent_platform.application",
 ]
 # Composition Root（``runtime.factory``）按设计需显式注册内置 Agent；该链路
 # 不属于 "adapters 直接依赖 agents/application" 的违规。
 ignore_imports = [
     "agent_platform.runtime.factory -> agent_platform.agents.stock_recap.manifest",
-    "agent_platform.runtime.factory -> agent_platform.agents.hsk30_tutor.manifest",
 ]
 
 [[tool.importlinter.contracts]]

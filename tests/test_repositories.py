@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from agent_platform.core.domain.models import (
+from agent_platform.domain.models import (
     BacktestResult,
     EvolutionNote,
     Features,
@@ -19,7 +19,7 @@ from agent_platform.core.domain.models import (
     RecapDaily,
     RecapDailySection,
 )
-from agent_platform.core.domain.repositories import (
+from agent_platform.domain.repositories import (
     BacktestRepository,
     EvolutionRepository,
     ExperimentRepository,
@@ -27,8 +27,8 @@ from agent_platform.core.domain.repositories import (
     RecapAuditRepository,
     RunRepository,
 )
-from agent_platform.infra.persistence.db import init_db
-from agent_platform.infra.persistence.repositories import (
+from agent_platform.infrastructure.persistence.db import init_db
+from agent_platform.infrastructure.persistence.repositories import (
     Repositories,
     build_default_repositories,
 )

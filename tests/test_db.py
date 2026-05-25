@@ -1,7 +1,7 @@
 """Unit tests for db.py — covers both :memory: and file-based modes."""
 import pytest
 
-from agent_platform.infra.persistence.db import (
+from agent_platform.infrastructure.persistence.db import (
     get_conn,
     init_db,
     insert_run,
@@ -9,7 +9,7 @@ from agent_platform.infra.persistence.db import (
     insert_feedback,
     load_feedback_summary,
 )
-from agent_platform.core.domain.models import (
+from agent_platform.domain.models import (
     Features,
     LlmTokens,
     MarketSnapshot,
@@ -20,7 +20,7 @@ from agent_platform.core.domain.models import (
 
 @pytest.fixture
 def mem_db():
-    import agent_platform.infra.persistence.db as db_module
+    import agent_platform.infrastructure.persistence.db as db_module
     db_module._memory_conn = None
     init_db(":memory:")
     yield ":memory:"
@@ -72,7 +72,7 @@ def _insert_sample_run(db_path: str, request_id: str = "req-001") -> None:
 # ─── get_conn ─────────────────────────────────────────────────────────────────
 
 def test_get_conn_memory_singleton(mem_db):
-    import agent_platform.infra.persistence.db as db_module
+    import agent_platform.infrastructure.persistence.db as db_module
     with get_conn(":memory:"):
         pass
     conn1 = db_module._memory_conn
@@ -158,13 +158,13 @@ def test_feedback_empty(mem_db):
 # ─── prompt_state ─────────────────────────────────────────────────────────────
 
 def test_prompt_state_empty_returns_none(file_db):
-    from agent_platform.infra.persistence.db import get_active_prompt_version
+    from agent_platform.infrastructure.persistence.db import get_active_prompt_version
 
     assert get_active_prompt_version(file_db) is None
 
 
 def test_prompt_state_upsert(file_db):
-    from agent_platform.infra.persistence.db import (
+    from agent_platform.infrastructure.persistence.db import (
         get_active_prompt_version,
         set_active_prompt_version,
     )

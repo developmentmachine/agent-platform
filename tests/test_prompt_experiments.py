@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 
 from agent_platform.agents.stock_recap.experiments import select_variant
 from agent_platform.config.settings import Settings
-from agent_platform.infra.persistence.db import (
+from agent_platform.infrastructure.persistence.db import (
     get_conn,
     init_db,
     list_prompt_experiments,
@@ -235,7 +235,7 @@ def test_pipeline_persists_experiment_id_and_variant(tmp_path, monkeypatch):
     )
 
     from agent_platform.agents.stock_recap.use_case import generate_once
-    from agent_platform.core.domain.models import GenerateRequest
+    from agent_platform.domain.models import GenerateRequest
 
     req = GenerateRequest(
         mode="daily",
@@ -258,7 +258,7 @@ def test_pipeline_persists_experiment_id_and_variant(tmp_path, monkeypatch):
     assert row["prompt_version"] == "v-experiment"
 
     # recap_audit 同步带上
-    from agent_platform.infra.persistence.db import load_recap_audit
+    from agent_platform.infrastructure.persistence.db import load_recap_audit
 
     audits = load_recap_audit(settings.db_path, request_id=resp.request_id)
     assert len(audits) == 1
@@ -279,7 +279,7 @@ def test_pipeline_no_experiment_keeps_global_prompt_version(tmp_path, monkeypatc
     init_db(settings.db_path)
 
     from agent_platform.agents.stock_recap.use_case import generate_once
-    from agent_platform.core.domain.models import GenerateRequest
+    from agent_platform.domain.models import GenerateRequest
 
     req = GenerateRequest(
         mode="daily", provider="mock", force_llm=False, skip_trading_check=True
@@ -299,7 +299,7 @@ def test_pipeline_no_experiment_keeps_global_prompt_version(tmp_path, monkeypatc
 
 
 def _client(settings: Settings) -> TestClient:
-    from agent_platform.adapters.http.api.app import create_app
+    from agent_platform.interfaces.api.app import create_app
 
     app = create_app()
     return TestClient(app)

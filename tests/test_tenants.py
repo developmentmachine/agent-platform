@@ -19,18 +19,18 @@ import pytest
 from fastapi.testclient import TestClient
 
 import agent_platform.config.settings as settings_module
-import agent_platform.infra.persistence.db as db_module
+import agent_platform.infrastructure.persistence.db as db_module
 from agent_platform.config.settings import Settings
-from agent_platform.core.domain.models import (
+from agent_platform.domain.models import (
     Features,
     LlmTokens,
     MarketSnapshot,
     RecapDaily,
     RecapDailySection,
 )
-from agent_platform.core.runtime.principal import PrincipalContext, current_principal
-from agent_platform.core.runtime.run_context import RunContext
-from agent_platform.infra.persistence.db import (
+from agent_platform.domain.principal import PrincipalContext, current_principal
+from agent_platform.domain.run_context import RunContext
+from agent_platform.infrastructure.persistence.db import (
     count_tenants,
     enqueue_pending_action,
     init_db,
@@ -163,7 +163,7 @@ def _build_app_with_settings(settings: Settings):
     """每个 case 重新装一遍 app + 注入 settings，避免 Settings 单例污染。"""
     settings_module._settings_instance = settings
     from agent_platform.config.settings import get_settings as _get_settings
-    from agent_platform.adapters.http.api.app import create_app
+    from agent_platform.interfaces.api.app import create_app
 
     app = create_app()
     app.dependency_overrides[_get_settings] = lambda: settings

@@ -1,7 +1,7 @@
 """Repository 工厂 Port — 平台内核只依赖工厂，不依赖具体 DB。
 
 现有具体仓储 Protocol（``RunRepository`` / ``FeedbackRepository`` / ...）保留在
-``agent_platform.core.domain.repositories`` 以保兼容；本工厂用于在 Composition Root
+``agent_platform.domain.repositories`` 以保兼容；本工厂用于在 Composition Root
 统一装配。
 """
 from __future__ import annotations
