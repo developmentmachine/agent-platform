@@ -126,26 +126,27 @@ LLM 被要求输出 **JSON**，并校验为 **Pydantic 模型**：
 
 | 路径 | 职责 |
 |------|------|
-| `domain/` | 与框架无关的类型：`GenerateRequest`、`GenerateResponse`、`MarketSnapshot`、`Features`、`Recap*`、`RunContext` 等 |
-| `application/recap.py` | `generate_once`、`iter_generate_ndjson`；外层 OTEL span +（非流）`RunContext` |
-| `application/orchestration/` | `RecapAgentRunState`、分阶段函数、`execute_recap_pipeline`、`iter_recap_agent_ndjson` |
-| `application/memory/manager.py` | 历史记忆加载、模式提炼、**进化周期**、`prompt_version` 进程内缓存 |
-| `application/side_effects/` | 副作用（侧效）层：`backtest` / `evolution` / `push` / `deferred`（供 API `BackgroundTasks`、调度器、CLI 共用）；`application/recap_support.py` 为兼容 shim |
-| `application/agent.py` | 薄封装 `RecapAgent.run` → `generate_once` |
-| `policy/guardrails.py` | 请求校验、消息截断、`coerce_recap_output`（免责回填） |
-| `infrastructure/data/` | 采集、特征、日历、各数据源 |
-| `infrastructure/llm/` | 多后端 `call_llm`、prompt 组装、自动评测 |
-| `infrastructure/tools/` | `RecapToolRunner`、registry、各 tool handler |
-| `infrastructure/persistence/db.py` | SQLite：runs、feedback、evolution、backtest、指标 |
-| `infrastructure/push/` | 企微等推送 |
-| `interfaces/api/routes.py` | FastAPI：鉴权、限流、CORS、JSON/流式 recap、反馈、历史 |
-| `interfaces/cli.py` | 平台 CLI 分发器：维护 `AGENTS` 字典，将子命令路由到各 agent；保留 `--mcp-tools` 等平台级标志 |
-| `interfaces/agents/<agent>_cli.py` | 单个 agent 的 CLI 模块（实现 `register_subparser` / `run`），新 agent 在此扩展 |
-| `interfaces/mcp_stdio.py` | MCP 工具进程（与进程内 tools 语义对齐） |
-| `interfaces/scheduler/jobs.py` | APScheduler 与交易日逻辑 |
-| `config/settings.py` | Pydantic Settings / 环境变量 |
-| `observability/` | OpenTelemetry 与 `ContextVar` 运行上下文 |
-| `resources/prompts/`、`skills/` | 版本化 system prompt 与 skill 叠加 |
+| `core/domain/models.py` | `GenerateRequest`、`GenerateResponse`、`MarketSnapshot`、`Recap*` 等 |
+| `agents/stock_recap/use_case.py` | `generate_once`、`iter_generate_ndjson` |
+| `agents/stock_recap/pipeline_v2.py` | Phase 编排（默认） |
+| `agents/stock_recap/phases/` | perceive … reflect 各阶段 |
+| `agents/stock_recap/memory/manager.py` | 历史记忆、进化、`prompt_version` |
+| `agents/stock_recap/effects/` | push、backtest、evolution 等业务副作用 |
+| `agents/stock_recap/data/` | 采集、特征、日历、数据源 |
+| `agents/stock_recap/llm/` | prompt 组装、解析、评测 |
+| `agents/stock_recap/manifest.py` | `AgentDefinition`、HTTP/CLI/调度钩子 |
+| `agents/stock_recap/http_routes/` | `/v1/recap`、反馈等路由 |
+| `agents/stock_recap/cli.py` | 子命令与交互 REPL |
+| `infra/guardrail/` | 输入/输出护栏 |
+| `infra/llm/` | 多后端 `call_llm` |
+| `infra/persistence/db.py` | SQLite 持久化 |
+| `infra/push/` | 企微推送 |
+| `adapters/http/api/app.py` | FastAPI 工厂，自动挂载各 Agent 路由 |
+| `adapters/cli/main.py` | 平台 CLI，`--list-agents`、`--mcp-tools` |
+| `tools_server/` | 独立 MCP 工具服务 |
+| `config/settings.py` | 环境变量（`RECAP_*`、`QQ_BOT_*`） |
+| `runtime/observability/` | OTEL、结构化日志 |
+| `agents/stock_recap/skills/`、`prompts/` | Skill 与 system prompt |
 
 ---
 

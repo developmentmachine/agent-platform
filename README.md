@@ -1,122 +1,154 @@
 # Agent Platform 使用文档
 
+**Agent Platform** 是多智能体运行平台：统一 CLI / HTTP / 调度 / QQ·企微等入口，通过 `AgentRegistry` 自动发现各业务 Agent。当前内置：
+
+| Agent ID | 说明 | 能力 |
+|----------|------|------|
+| `stock-recap` | A 股日终复盘 / 次日策略 | 报告、流式 NDJSON、定时任务、MCP 工具 |
+| `hsk30-tutor` | HSK 3.0 中文对话陪练（新三阶段九级，非 HSK 2.0） | 多轮对话（CHAT） |
+
+平台架构与扩展方式见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、[docs/extending-agents.md](docs/extending-agents.md)。`stock-recap` 业务设计见 [docs/ARCHITECTURE_AND_BUSINESS.md](docs/ARCHITECTURE_AND_BUSINESS.md)。
+
+---
+
 ## 一、本地运行
 
 ### 环境准备
 
 ```bash
-# 克隆项目
 git clone <repo-url>
-cd stock-recap-agent
+cd agent-platform   # 以实际仓库目录名为准
 
-# 安装依赖（需要 Python 3.11+）
 pip install uv
 uv sync
 ```
 
-复制配置文件：
+复制配置：
 
 ```bash
 cp .env.example .env
 ```
 
-编辑 `.env`，至少配置 LLM 后端（见第三节）。
+编辑 `.env`，至少配置 LLM 后端（见第三节）。`hsk30-tutor` 默认使用 OpenAI 兼容接口（`OPENAI_API_KEY` + `RECAP_MODEL`）；未配置 API Key 时返回本地占位回复。
 
 ---
 
 ### 命令格式
 
-本项目是多智能体平台，通过子命令指定要运行的 agent：
-
 ```
-uv run agent-platform <agent-name> [参数]
+uv run agent-platform <agent-id> [参数]
 ```
 
-目前内置 agent：
-
-| agent | 说明 |
-|-------|------|
-| `stock-recap` | A股日终复盘 / 次日策略智能体 |
-
-查看帮助：
+查看已注册 Agent 与能力：
 
 ```bash
 uv run agent-platform --help
 uv run agent-platform --list-agents
 uv run agent-platform stock-recap --help
+uv run agent-platform hsk30-tutor --help
 ```
 
-### 架构（v2）
+> **免 `uv run` 前缀**：`uv tool install --editable .` 后可直接使用 `agent-platform <agent-id> ...`。
 
-通用 Agent 平台分层与迁移说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)；扩展新 Agent 见 [docs/extending-agents.md](docs/extending-agents.md)。
+### 架构检查（CI 同款）
 
 ```bash
-# 架构边界检查（CI 同款）
 uv run lint-imports
 ```
 
-默认使用 **pipeline v2**（`RECAP_PIPELINE_V2=true`，Phase 类编排）。若需对比旧路径：
+`stock-recap` 默认走 **pipeline v2**（`RECAP_PIPELINE_V2=true`，Phase 编排）。排障对比旧路径：
 
 ```bash
-RECAP_PIPELINE_V2=false uv run agent-platform stock-recap --mode daily --provider mock --no-llm
-```
-
-> **免 `uv run` 前缀**：执行 `uv tool install --editable .` 将平台安装为全局命令，
-> 之后可直接使用 `agent-platform stock-recap ...`（代码修改实时生效）。
-
----
-
-### 快速测试（无需 API Key）
-
-```bash
-# mock 数据，不调用 LLM，验证环境是否正常
-uv run agent-platform stock-recap --mode daily --provider mock --no-llm
-
-# mock 数据 + 查看将发给 LLM 的 payload
-uv run agent-platform stock-recap --mode daily --provider mock --dry-run
+RECAP_PIPELINE_V2=false uv run agent-platform stock-recap --once --mode daily --provider mock --no-llm
 ```
 
 ---
 
-### 生成复盘
+### stock-recap：快速测试（无需 API Key）
 
 ```bash
-# 日终复盘（真实行情）
-uv run agent-platform stock-recap --mode daily --provider live --model cursor-cli
+# mock 数据，不调用 LLM
+uv run agent-platform stock-recap --once --mode daily --provider mock --no-llm
 
-# 次日策略
-uv run agent-platform stock-recap --mode strategy --provider live --model cursor-cli
+# 查看将发给 LLM 的 payload
+uv run agent-platform stock-recap --once --mode daily --provider mock --dry-run
+```
+
+**交互 REPL（默认）**：不带 `--once` / `--serve` 等独占动作时进入交互模式，可用 `run daily`、`set provider mock`、`history` 等命令。
+
+```bash
+uv run agent-platform stock-recap --provider mock
+```
+
+---
+
+### stock-recap：生成复盘
+
+```bash
+# 单轮：日终复盘（真实行情）
+uv run agent-platform stock-recap --once --mode daily --provider live --model cursor-cli
+
+# 单轮：次日策略
+uv run agent-platform stock-recap --once --mode strategy --provider live --model cursor-cli
 
 # 指定日期
-uv run agent-platform stock-recap --mode daily --provider live --model cursor-cli --date 2024-01-02
+uv run agent-platform stock-recap --once --mode daily --provider live --date 2024-01-02
 
-# 不写文件，仅输出到 stdout
-uv run agent-platform stock-recap --mode daily --provider mock --no-write-files
+# 仅 stdout，不写文件
+uv run agent-platform stock-recap --once --mode daily --provider mock --no-write-files
 ```
 
-provider 只有两个选项：
-- `live` — 真实行情，内部自动 fallback（腾讯/新浪/AkShare）
-- `mock` — 确定性随机数据，用于测试/离线
+`--provider` 常用值：`mock`（离线测试）、`live`（多源 fallback）、`akshare`（显式 AkShare）。可用 `agent-platform stock-recap --help` 查看注册表中的全部 id。
+
+---
+
+### hsk30-tutor：中文陪练
+
+```bash
+# 交互 REPL（默认）
+uv run agent-platform hsk30-tutor
+uv run agent-platform hsk30-tutor --level 3 --locale zh
+
+# 单轮脚本
+uv run agent-platform hsk30-tutor -m "请纠正：我昨天去了商店。" --once
+uv run agent-platform hsk30-tutor -m "你好" --once --json
+```
+
+REPL 内命令：`/level 1-9`、`/locale zh|en|both`、`/clear`、`/help`、`/quit`。
+
+需配置 `OPENAI_API_KEY`（及可选 `RECAP_MODEL`）方可调用真实 LLM；否则为 stub 占位回复。
+
+考纲数据占位目录：`src/agent_platform/resources/hsk30/`（见该目录 README）。
 
 ---
 
 ### 启动 API 服务
 
+`stock-recap --serve` 会启动统一 FastAPI 应用，并**自动挂载所有已注册 Agent 的 HTTP 路由**（含 `hsk30-tutor`）。
+
 ```bash
-# 基础启动
 uv run agent-platform stock-recap --serve --host 0.0.0.0 --port 8000
 
-# 带调度器（每天 15:30 自动触发）
+# 带调度器（交易日 15:30 / 15:35 / 15:40 自动任务，仅 stock-recap）
 RECAP_SCHEDULER_ENABLED=true uv run agent-platform stock-recap --serve
 ```
 
-API 文档访问：http://localhost:8000/docs
+文档：http://localhost:8000/docs
+
+| 路径 | Agent | 说明 |
+|------|-------|------|
+| `POST /v1/recap` | stock-recap | 生成复盘 JSON |
+| `POST /v1/recap/stream` | stock-recap | NDJSON 阶段流 |
+| `GET /v1/history` 等 | stock-recap | 历史、反馈等 |
+| `POST /v1/hsk30-tutor/chat` | hsk30-tutor | 多轮陪练（body 含 `message`、`level`、`history`） |
+
+鉴权：设置 `RECAP_API_KEY` 后，上述 `/v1/*` 需 `X-API-Key`（与 recap 相同）。
 
 ---
 
 ### QQ 机器人
 
-在 `.env` 中配置（见 `.env.example` 中 ``QQ_BOT_*`` 段）：
+在 `.env` 中配置（见 `.env.example` 中 `QQ_BOT_*` 段）：
 
 ```bash
 QQ_BOT_ENABLED=true
@@ -124,38 +156,30 @@ QQ_BOT_APP_ID=你的AppID
 QQ_BOT_CLIENT_SECRET=你的ClientSecret
 QQ_BOT_RECAP_PROVIDER=live
 QQ_BOT_RECAP_FORCE_LLM=true
-RECAP_GEMINI_CLI_CMD=gemini   # 或 RECAP_MODEL / QQ_BOT_RECAP_MODEL
+# QQ_DEFAULT_AGENT_ID=stock-recap
 ```
 
-启动长连接（阻塞进程，建议单独终端或 systemd）：
+启动长连接：
 
 ```bash
 uv run agent-platform-qq-bot
-# 等价：uv run python -m agent_platform.adapters.qq
 ```
 
 使用方式：
 
-- **QQ 群**：@ 机器人后发消息（默认触发日终复盘；含「策略」「明天」走次日策略）
-- **私聊**：直接发文字即可
+- **QQ 群**：@ 机器人后发消息（默认 `stock-recap` 日终复盘；含「策略」「明天」走次日策略）
+- **私聊**：直接发文字
 
-单次复盘可能耗时 1～2 分钟，已在 botpy 事件里用线程池执行，不阻塞心跳。
+单次复盘可能耗时 1～2 分钟；事件在线程池执行，不阻塞心跳。**长回复**会按段落拆成多条消息发送（被动回复最多 5 条，超出改主动消息），避免在 adapter 层硬截断。
 
 ---
 
-### 其他命令
+### stock-recap：其它命令
 
 ```bash
-# 查看历史记录
 uv run agent-platform stock-recap --history --limit 20
-
-# 手动触发进化分析
 uv run agent-platform stock-recap --evolve
-
-# 手动回测昨日策略
 uv run agent-platform stock-recap --backtest
-
-# 测试企业微信推送
 RECAP_WXWORK_WEBHOOK_URL=https://... uv run agent-platform stock-recap --push-test
 ```
 
@@ -163,245 +187,104 @@ RECAP_WXWORK_WEBHOOK_URL=https://... uv run agent-platform stock-recap --push-te
 
 ### 数据库
 
-默认持久化到工作目录下的 `recap_system.db`（WAL 模式、跨进程安全）。
+默认：`recap_system.db`（WAL，跨进程安全）。
 
 ```bash
-# 自定义路径
-RECAP_DB_PATH=./data/recap.db uv run agent-platform stock-recap --mode daily --provider mock
-
-# 仅单进程测试用：重启后数据清空，且多线程/多 worker 下不安全
-RECAP_DB_PATH=:memory: uv run agent-platform stock-recap --mode daily --provider mock
+RECAP_DB_PATH=./data/recap.db uv run agent-platform stock-recap --once --mode daily --provider mock
+RECAP_DB_PATH=:memory: uv run agent-platform stock-recap --once --mode daily --provider mock
 ```
 
 ---
 
 ## 二、容器部署
 
-### 单容器运行（容器内持久化）
-
 ```bash
-# 构建镜像
-docker build -t stock-recap .
-
-# 运行（默认写入容器内 recap_system.db；容器销毁即丢失，生产请挂卷——见下一小节）
-docker run -d \
-  -p 8000:8000 \
-  -e RECAP_LLM_BACKEND=gemini-cli \
-  -e GEMINI_API_KEY=your-key \
-  --name recap \
-  stock-recap
-```
-
----
-
-### 持久化数据库
-
-```bash
-mkdir -p ./data
-
-docker run -d \
-  -p 8000:8000 \
-  -e RECAP_DB_PATH=/data/recap.db \
+docker build -t agent-platform .
+docker run -d -p 8000:8000 \
   -e RECAP_LLM_BACKEND=openai \
   -e OPENAI_API_KEY=sk-... \
+  -e RECAP_DB_PATH=/data/recap.db \
   -v $(pwd)/data:/data \
-  --name recap \
-  stock-recap
+  --name agent-platform \
+  agent-platform
 ```
 
----
+镜像默认命令：`agent_platform stock-recap --serve --host 0.0.0.0 --port 8000`（挂载全部 Agent HTTP 路由）。
 
-### docker-compose（推荐）
+`docker-compose.yml` 示例见仓库内文件；生产建议挂卷 `./data:/data`。
 
-创建 `.env` 文件：
-
-```bash
-RECAP_LLM_BACKEND=openai
-OPENAI_API_KEY=sk-...
-RECAP_DB_PATH=/data/recap.db
-RECAP_SCHEDULER_ENABLED=true
-RECAP_PUSH_ENABLED=false
-```
-
-启动：
-
-```bash
-# 取消 docker-compose.yml 中 volumes 的注释，然后：
-docker compose up -d
-
-# 查看日志
-docker compose logs -f
-
-# 停止
-docker compose down
-```
-
----
-
-### 健康检查
+健康检查：
 
 ```bash
 curl http://localhost:8000/healthz
-# {"ok": true, "time": "...", "prompt_version": "..."}
 ```
 
 ---
 
 ## 三、集成到 AI 大模型
 
-系统通过 `RECAP_LLM_BACKEND` 和 `RECAP_MODEL` 两个环境变量控制使用哪个模型。
-
----
+通过 `RECAP_LLM_BACKEND` 与 `RECAP_MODEL`（或 `--model`）选择后端。`stock-recap` 与平台级工具循环共用该配置；`hsk30-tutor` 当前为 OpenAI Chat Completions 轻量客户端（无 function calling）。
 
 ### OpenAI / 兼容接口
 
 ```bash
 OPENAI_API_KEY=sk-...
 RECAP_LLM_BACKEND=openai
-RECAP_MODEL=gpt-4.1-mini        # 或 gpt-4o、gpt-4.1 等
+RECAP_MODEL=gpt-4.1-mini
 ```
 
-兼容 OpenAI 接口的服务（如 DeepSeek、Moonshot）：
+### Gemini CLI / Cursor CLI / Ollama
 
-```bash
-OPENAI_API_KEY=your-key
-OPENAI_BASE_URL=https://api.deepseek.com/v1
-RECAP_LLM_BACKEND=openai
-RECAP_MODEL=deepseek-chat
-```
+与先前版本相同，详见 `.env.example`。`--model` 表达式示例：`openai:gpt-4o`、`ollama:qwen2.5:14b`、`cursor-cli`、`gemini-cli`。
 
----
-
-### Gemini CLI（本地）
-
-需先安装 [gemini-cli](https://github.com/google-gemini/gemini-cli)：
-
-```bash
-RECAP_LLM_BACKEND=gemini-cli
-GEMINI_API_KEY=your-key          # 可选，gemini-cli 已登录时不需要
-RECAP_GEMINI_CLI_CMD=gemini      # gemini-cli 的命令名
-RECAP_GEMINI_TIMEOUT_S=300
-```
-
-运行：
-
-```bash
-uv run agent-platform stock-recap --mode daily --provider mock
-# 等价于：
-uv run agent-platform stock-recap --mode daily --provider mock --model gemini-cli
-```
-
----
-
-### Cursor CLI（本地）
-
-官方说明见 [Cursor 命令列介面（CLI）](https://cursor.com/zh-Hant/docs/cli/overview)。终端中可执行的是 **`agent`**，本仓库配置里将该后端命名为 **`cursor-cli`**。
-
-需先安装 Cursor CLI 并完成登录：
-
-```bash
-RECAP_LLM_BACKEND=cursor-cli
-RECAP_CURSOR_CLI_CMD=agent
-RECAP_CURSOR_TIMEOUT_S=300
-```
-
-（仍支持旧环境变量名 `RECAP_CURSOR_AGENT_CMD`、`RECAP_LLM_BACKEND=cursor-agent` 与 `--model cursor-agent`。）
-
-或在命令行临时指定：
-
-```bash
-uv run agent-platform stock-recap --mode daily --provider mock --model cursor-cli
-```
-
----
-
-### Ollama（本地模型）
-
-需先启动 Ollama 并拉取模型：
-
-```bash
-ollama pull qwen2.5:14b
-```
-
-配置：
-
-```bash
-RECAP_LLM_BACKEND=ollama
-RECAP_MODEL=qwen2.5:14b
-RECAP_OLLAMA_BASE_URL=http://127.0.0.1:11434
-```
-
-或命令行指定：
-
-```bash
-uv run agent-platform stock-recap --mode daily --provider mock --model ollama:qwen2.5:14b
-```
-
----
-
-### 模型表达式速查
-
-`--model` 参数支持以下格式：
-
-| 表达式 | 后端 | 说明 |
-|--------|------|------|
-| `openai:gpt-4o` | OpenAI | 指定模型名 |
-| `ollama:qwen2.5:14b` | Ollama | 指定本地模型 |
-| `cursor-cli` | Cursor CLI | 使用官方 `agent` 命令（`cursor-agent` 为兼容别名） |
-| `gemini-cli` | Gemini | 使用 Gemini CLI |
-| `gemini:gemini-2.0-flash` | Gemini | 指定 Gemini 模型 |
-
----
-
-### MCP 工具（联网增强）
-
-启用后 LLM 可主动查询实时行情、历史记录：
+### MCP 工具（stock-recap）
 
 ```bash
 RECAP_TOOLS_ENABLED=true
-RECAP_TOOLS_WEB_SEARCH=true      # 联网搜索（duckduckgo，免费）
-RECAP_TOOLS_MARKET_DATA=true     # akshare 行情查询
-RECAP_TOOLS_HISTORY=true         # 内部历史复盘查询
+RECAP_TOOLS_WEB_SEARCH=true
+RECAP_TOOLS_MARKET_DATA=true
+RECAP_TOOLS_HISTORY=true
 ```
 
-OpenAI / Ollama 后端使用原生 function calling；Cursor CLI / Gemini CLI 后端自动预执行工具并注入 prompt。
+独立 MCP 进程：`uv run agent-platform --mcp-tools`（或 `uv run stock-recap-mcp` / `agent-platform-tools-mcp`）。
 
 ---
 
-### API 调用示例
-
-服务启动后，可通过 HTTP 接口集成到任意系统：
+### API 示例（stock-recap）
 
 ```bash
-# 生成复盘
 curl -X POST http://localhost:8000/v1/recap \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-recap-api-key" \
   -d '{"mode": "daily", "provider": "live"}'
 
-# 查看历史
-curl http://localhost:8000/v1/history \
-  -H "X-API-Key: your-recap-api-key"
-
-# 提交反馈（触发进化）
-curl -X POST http://localhost:8000/v1/feedback \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: your-recap-api-key" \
-  -d '{"request_id": "...", "rating": 4, "comment": "分析到位"}'
-```
-
-**流式复盘（NDJSON）**：`POST /v1/recap/stream`，`Content-Type: application/x-ndjson`。首行为 `event: meta`，随后 7 行 `event: phase`（`perceive` … `reflect`），末行为 `event: result`（`body` 为与 `/v1/recap` 相同的 JSON 结构；`http_status` 可为 503 表示强制 LLM 但未产出 recap）。任一步骤失败时输出 `event: error` 后结束，且不会触发延后的进化/回测。
-
-```bash
 curl -N -X POST http://localhost:8000/v1/recap/stream \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-recap-api-key" \
-  -H "X-Session-Id: optional-client-session" \
   -d '{"mode": "daily", "provider": "mock", "force_llm": false}'
 ```
 
-可选请求头 **`X-Session-Id`**：写入遥测与 `meta`，便于多轮场景关联（当前仍以单次生成为主）。
+流式协议：首行 `event: meta`，随后 `event: phase`（perceive … reflect），末行 `event: result`；失败为 `event: error`。
 
-前端跨域：设置环境变量 **`RECAP_CORS_ORIGINS`**（逗号分隔，如 `http://localhost:5173`）后，服务启动时会自动挂载 CORS 中间件。
+### API 示例（hsk30-tutor）
 
-API Key 通过 `RECAP_API_KEY` 环境变量设置，不设置则不鉴权（本地开发用）。
+```bash
+curl -X POST http://localhost:8000/v1/hsk30-tutor/chat \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-recap-api-key" \
+  -d '{"message": "你好", "level": 2, "history": [], "explain_locale": "both"}'
+```
+
+可选请求头 **`X-Session-Id`**：写入遥测，便于关联（stock-recap 主路径仍为单次生成）。
+
+前端 CORS：`RECAP_CORS_ORIGINS`（逗号分隔）。未设置 `RECAP_API_KEY` 时不鉴权（仅建议本地开发）。
+
+---
+
+## 四、扩展新 Agent
+
+1. 在 `src/agent_platform/agents/<id>/` 实现业务与 `manifest.py`（`register(reg)`）。
+2. 在 `runtime/factory.py` 的 `register_builtin_agents` 注册，和/或在 `pyproject.toml` 的 `[project.entry-points."agent_platform.agents"]` 声明。
+3. 在 manifest 中提供 `cli_subparser_factory` / `cli_run_handler`，可选 `http_router_factories`、`scheduled_jobs`。
+
+CLI / HTTP **无需再改平台分发器**。详见 [docs/extending-agents.md](docs/extending-agents.md)。
