@@ -794,7 +794,7 @@ def main():
             import traceback
             traceback.print_exc()
     elif (not args.no_image or args.image_only) and not IMAGE_SUPPORT:
-        print("\n⚠️  无法生成图片，请运行: uv run scripts/leaderboard_summary.py")
+        print("\n⚠️  无法生成图片，请运行: uv run leaderboard_summary.py")
 
 
 if __name__ == '__main__':

@@ -58,11 +58,11 @@ def main():
         print(f"未找到日期为 {today} 的复盘文本文件。")
 
     # 2. 执行龙虎榜汇总
-    # uv run scripts/leaderboard_summary.py --footer-image scripts/assets/qrcode-wechat.jpg --footer-image scripts/assets/qrcode-mini.jpg
+    # uv run leaderboard_summary.py --footer-image assets/qrcode-wechat.jpg --footer-image assets/qrcode-mini.jpg
     leaderboard_cmd = [
-        "uv", "run", "scripts/leaderboard_summary.py",
-        "--footer-image", "scripts/assets/qrcode-wechat.jpg",
-        "--footer-image", "scripts/assets/qrcode-mini.jpg"
+        "uv", "run", "leaderboard_summary.py",
+        "--footer-image", "assets/qrcode-wechat.jpg",
+        "--footer-image", "assets/qrcode-mini.jpg"
     ]
     
     if not run_command(leaderboard_cmd):
