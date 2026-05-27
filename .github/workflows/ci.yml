@@ -44,10 +44,46 @@ jobs:
 
       - name: Smoke test container
         run: |
+          cleanup() {
+            docker rm -f recap-smoke >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
           docker run -d --name recap-smoke \
             -e RECAP_DB_PATH=:memory: \
             -p 8000:8000 \
             stock-recap:ci
-          sleep 5
-          curl -f http://localhost:8000/healthz
-          docker stop recap-smoke
+
+          for i in {1..30}; do
+            if curl -fsS http://localhost:8000/healthz; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          docker logs recap-smoke
+          exit 1
+
+      - name: Validate compose config
+        run: docker compose config
+
+      - name: Smoke test docker compose
+        run: |
+          cleanup() {
+            IMAGE_NAME=stock-recap:ci docker compose down -v >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          IMAGE_NAME=stock-recap:ci \
+          RECAP_DOCKER_DB_PATH=:memory: \
+          docker compose up -d --no-build stock-recap
+
+          for i in {1..30}; do
+            if curl -fsS http://localhost:8000/healthz; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          IMAGE_NAME=stock-recap:ci docker compose logs stock-recap
+          exit 1

@@ -2,20 +2,29 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# 安装 uv
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    RECAP_DB_PATH=/data/recap_system.db \
+    RECAP_OUTPUT_DIR=/data/reports \
+    RECAP_LOG_LEVEL=INFO
+
+# 安装 uv。业务依赖由 pyproject.toml 管理。
 RUN pip install --no-cache-dir uv
 
-# 先复制依赖文件，利用 Docker 层缓存
-COPY pyproject.toml ./
-RUN uv pip install --system --no-cache -e .
-
-# 复制源码
+COPY pyproject.toml uv.lock ./
 COPY src/ ./src/
 
-# 默认使用内存数据库（单体运行无需挂载外部文件）
-ENV RECAP_DB_PATH=:memory:
-ENV RECAP_LOG_LEVEL=INFO
+# 采用 editable install，确保内置 prompts/skills 等源码资源可直接随镜像读取。
+RUN uv pip install --system --no-cache -e . \
+    && useradd --create-home --home-dir /app --shell /usr/sbin/nologin app \
+    && mkdir -p /data/reports \
+    && chown -R app:app /app /data
+
+USER app
 
 EXPOSE 8000
 
-CMD ["agent_platform", "stock-recap", "--serve", "--host", "0.0.0.0", "--port", "8000"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"
+
+CMD ["agent-platform", "stock-recap", "--serve", "--host", "0.0.0.0", "--port", "8000"]

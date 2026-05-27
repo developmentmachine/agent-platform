@@ -198,6 +198,31 @@ RECAP_DB_PATH=:memory: uv run agent-platform stock-recap --once --mode daily --p
 
 ## 二、容器部署
 
+一次性启动（推荐）：
+
+```bash
+cp .env.docker.example .env
+# 编辑 .env：至少按需填写 OPENAI_API_KEY、RECAP_API_KEY、RECAP_SCHEDULER_ENABLED 等
+
+docker compose up -d --build
+docker compose ps
+curl http://localhost:8000/healthz
+```
+
+默认会将数据库与报告输出持久化到宿主机 `./data`：
+
+- `RECAP_DOCKER_DB_PATH=/data/recap_system.db`
+- `RECAP_DOCKER_OUTPUT_DIR=/data/reports`
+- `RECAP_HTTP_PORT=8000` 可改宿主机端口，例如 `RECAP_HTTP_PORT=18000 docker compose up -d`
+
+停止服务：
+
+```bash
+docker compose down
+```
+
+如果只想手动构建/运行镜像：
+
 ```bash
 docker build -t agent-platform .
 docker run -d -p 8000:8000 \
@@ -209,15 +234,17 @@ docker run -d -p 8000:8000 \
   agent-platform
 ```
 
-镜像默认命令：`agent_platform stock-recap --serve --host 0.0.0.0 --port 8000`（挂载全部 Agent HTTP 路由）。
-
-`docker-compose.yml` 示例见仓库内文件；生产建议挂卷 `./data:/data`。
+镜像默认命令：`agent-platform stock-recap --serve --host 0.0.0.0 --port 8000`（挂载全部 Agent HTTP 路由）。
 
 健康检查：
 
 ```bash
 curl http://localhost:8000/healthz
 ```
+
+### GitHub 验证
+
+可以靠 GitHub Actions 做部署前验证：本仓库的 CI 会在 PR / `master` / `main` 上执行 Python 测试、Docker 镜像构建、容器健康检查、`docker compose config` 和 compose 启动烟测。提交 PR 后只要 CI 全绿，就说明镜像和 compose 至少能完成构建并启动到 `/healthz` 可用。
 
 ---
 
