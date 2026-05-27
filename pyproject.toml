@@ -126,12 +126,6 @@ forbidden_modules = [
     "agent_platform.agents",
     "agent_platform.application",
 ]
-# Composition Root（``runtime.factory``）按设计需显式注册内置 Agent；该链路
-# 不属于 "adapters 直接依赖 agents/application" 的违规。
-ignore_imports = [
-    "agent_platform.runtime.factory -> agent_platform.agents.stock_recap.manifest",
-]
-
 [[tool.importlinter.contracts]]
 name = "tools_server 不得 import 任何 Agent"
 type = "forbidden"
