@@ -25,13 +25,14 @@ class Settings(BaseSettings):
 
     # LLM
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
+    openai_base_url: Optional[str] = Field(default=None, alias="OPENAI_BASE_URL")
     gemini_api_key: Optional[str] = Field(default=None, alias="GEMINI_API_KEY")
     llm_backend: Optional[str] = Field(
         default=None,
         alias="RECAP_LLM_BACKEND",
         description="强制指定后端：openai / ollama / cursor-cli / gemini-cli（兼容旧值 cursor-agent）",
     )
-    model: str = Field(default="gpt-4.1-mini", alias="RECAP_MODEL")
+    model: str = Field(default="gpt-4o-mini", alias="RECAP_MODEL")
     temperature: float = Field(default=0.2, alias="RECAP_TEMPERATURE")
     timeout_s: int = Field(default=60, alias="RECAP_TIMEOUT_S")
     cursor_timeout_s: int = Field(default=300, alias="RECAP_CURSOR_TIMEOUT_S")

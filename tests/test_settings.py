@@ -11,7 +11,7 @@ def test_defaults(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     s = Settings(_env_file=None)
-    assert s.model == "gpt-4.1-mini"
+    assert s.model == "gpt-4o-mini"
     assert s.db_path == "recap_system.db"
     assert s.log_level == "INFO"
     assert s.push_enabled is False

@@ -270,7 +270,10 @@ def extract_market_patterns(
         if not settings.openai_api_key:
             return None
 
-        client = OpenAI(api_key=settings.openai_api_key)
+        client = OpenAI(
+            api_key=settings.openai_api_key,
+            base_url=settings.openai_base_url,
+        )
         resp = client.chat.completions.create(
             model=settings.model,
             messages=messages,  # type: ignore[arg-type]
@@ -422,7 +425,10 @@ def _run_evolution(
         logger.warning(_stable_json({"event": "evolution_no_api_key"}))
         return None
 
-    client = OpenAI(api_key=settings.openai_api_key)
+    client = OpenAI(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url,
+    )
     try:
         resp = client.beta.chat.completions.parse(
             model=settings.model,

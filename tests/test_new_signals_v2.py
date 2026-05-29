@@ -103,7 +103,7 @@ def test_extract_market_patterns_skips_non_openai_backend():
     settings = SimpleNamespace(
         llm_backend="gemini-cli",
         openai_api_key="should-not-be-used",
-        model="gpt-4.1-mini",
+        model="gpt-4o-mini",
         gemini_cli_cmd="echo",
         cursor_cli_cmd="echo",
         ollama_base_url="http://localhost:11434",
@@ -126,7 +126,7 @@ def test_check_and_run_evolution_skips_non_openai_backend():
     settings = SimpleNamespace(
         llm_backend="gemini-cli",
         openai_api_key="should-not-be-used",
-        model="gpt-4.1-mini",
+        model="gpt-4o-mini",
         gemini_cli_cmd="echo",
         cursor_cli_cmd="echo",
         ollama_base_url="http://localhost:11434",

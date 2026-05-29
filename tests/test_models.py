@@ -9,8 +9,10 @@ from agent_platform.domain.models import (
     Features,
     MarketSnapshot,
     GenerateRequest,
+    GenerateResponse,
     FeedbackRequest,
     LlmTokens,
+    Provider,
 )
 
 
@@ -134,3 +136,39 @@ def test_llm_tokens_defaults():
 def test_llm_tokens_set():
     t = LlmTokens(input_tokens=100, output_tokens=50, total_tokens=150)
     assert t.total_tokens == 150
+
+
+# ─── GenerateResponse ─────────────────────────────────────────────────────────
+
+def test_generate_response_error_field():
+    snapshot = MarketSnapshot(asof="2024-01-02T08:00:00+00:00", provider="mock", date="2024-01-02")
+    features = Features()
+
+    # 1. 有 error
+    resp = GenerateResponse(
+        request_id="test-1",
+        created_at="2024-01-02T08:01:00Z",
+        prompt_version="v1",
+        provider="mock",
+        snapshot=snapshot,
+        features=features,
+        model=None,
+        recap=None,
+        rendered_markdown=None,
+        error="test error"
+    )
+    assert resp.error == "test error"
+
+    # 2. 无 error (default None)
+    resp2 = GenerateResponse(
+        request_id="test-2",
+        created_at="2024-01-02T08:01:00Z",
+        prompt_version="v1",
+        provider="mock",
+        snapshot=snapshot,
+        features=features,
+        model=None,
+        recap=None,
+        rendered_markdown=None,
+    )
+    assert resp2.error is None

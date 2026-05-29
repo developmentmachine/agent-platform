@@ -15,10 +15,11 @@ services:
 
       # LLM 后端选择（openai / ollama / cursor-cli / gemini-cli）。
       RECAP_LLM_BACKEND: ${RECAP_LLM_BACKEND:-}
-      RECAP_MODEL: ${RECAP_MODEL:-gpt-4.1-mini}
+      RECAP_MODEL: ${RECAP_MODEL:-gpt-4o-mini}
 
       # API Keys：生产环境建议放入 .env，勿提交真实密钥。
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
 
       # API 安全与浏览器跨域。
@@ -39,6 +40,16 @@ services:
       RECAP_QDRANT_API_KEY: ${RECAP_QDRANT_API_KEY:-}
       RECAP_QDRANT_COLLECTION: ${RECAP_QDRANT_COLLECTION:-agent_platform_memory}
 
+      # QQ 机器人。
+      QQ_BOT_ENABLED: ${QQ_BOT_ENABLED:-true}
+      QQ_BOT_APP_ID: ${QQ_BOT_APP_ID:-}
+      QQ_BOT_CLIENT_SECRET: ${QQ_BOT_CLIENT_SECRET:-}
+      QQ_BOT_USER_ID: ${QQ_BOT_USER_ID:-}
+      QQ_BOT_RECAP_PROVIDER: ${QQ_BOT_RECAP_PROVIDER:-live}
+      QQ_BOT_RECAP_FORCE_LLM: ${QQ_BOT_RECAP_FORCE_LLM:-true}
+      QQ_BOT_RECAP_MODEL: ${QQ_BOT_RECAP_MODEL:-}
+      QQ_BOT_RECAP_SKIP_TRADING_CHECK: ${QQ_BOT_RECAP_SKIP_TRADING_CHECK:-false}
+
     volumes:
       - ./data:/data
 
@@ -49,3 +60,40 @@ services:
       timeout: 5s
       start_period: 15s
       retries: 3
+
+  qq-bot:
+    image: ${IMAGE_NAME:-agent-platform:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    init: true
+    command: ["agent-platform-qq-bot"]
+    environment:
+      # 共享环境变量。
+      RECAP_DB_PATH: ${RECAP_DOCKER_DB_PATH:-/data/recap_system.db}
+      RECAP_OUTPUT_DIR: ${RECAP_DOCKER_OUTPUT_DIR:-/data/reports}
+      RECAP_LOG_LEVEL: ${RECAP_LOG_LEVEL:-INFO}
+
+      RECAP_LLM_BACKEND: ${RECAP_LLM_BACKEND:-}
+      RECAP_MODEL: ${RECAP_MODEL:-gpt-4o-mini}
+
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+
+      # QQ 机器人专用变量。
+      QQ_BOT_ENABLED: ${QQ_BOT_ENABLED:-true}
+      QQ_BOT_APP_ID: ${QQ_BOT_APP_ID:-}
+      QQ_BOT_CLIENT_SECRET: ${QQ_BOT_CLIENT_SECRET:-}
+      QQ_BOT_USER_ID: ${QQ_BOT_USER_ID:-}
+      QQ_BOT_RECAP_PROVIDER: ${QQ_BOT_RECAP_PROVIDER:-live}
+      QQ_BOT_RECAP_FORCE_LLM: ${QQ_BOT_RECAP_FORCE_LLM:-true}
+      QQ_BOT_RECAP_MODEL: ${QQ_BOT_RECAP_MODEL:-}
+      QQ_BOT_RECAP_SKIP_TRADING_CHECK: ${QQ_BOT_RECAP_SKIP_TRADING_CHECK:-false}
+
+    volumes:
+      - ./data:/data
+
+    restart: unless-stopped
+    depends_on:
+      - stock-recap

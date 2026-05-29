@@ -24,7 +24,10 @@ class OpenAIEmbeddingProvider:
         except Exception as e:
             raise RuntimeError("openai package required for embeddings") from e
 
-        client = OpenAI(api_key=key)
+        client = OpenAI(
+            api_key=key,
+            base_url=self._settings.openai_base_url,
+        )
         model = self._settings.embedding_model
         resp = client.embeddings.create(model=model, input=list(texts))
         # API 保证与 input 顺序一致

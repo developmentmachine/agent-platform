@@ -111,6 +111,7 @@ def build_botpy_client(connector: Any):
     intents = botpy.Intents(
         public_messages=True,
         public_guild_messages=True,
+        direct_message=True,
     )
 
     class _PlatformBotpyClient(botpy.Client):  # type: ignore[misc]

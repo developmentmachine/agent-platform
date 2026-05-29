@@ -263,6 +263,7 @@ class GenerateResponse(BaseModel):
     push_result: Optional[bool] = Field(
         default=None, description="推送结果（True=成功，False=失败，None=未推送）"
     )
+    error: Optional[str] = Field(default=None, description="错误信息（如 LLM 调用失败、预算超限等）")
 
 
 class FeedbackRequest(BaseModel):

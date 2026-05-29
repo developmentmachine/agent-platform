@@ -257,7 +257,7 @@ curl http://localhost:8000/healthz
 ```bash
 OPENAI_API_KEY=sk-...
 RECAP_LLM_BACKEND=openai
-RECAP_MODEL=gpt-4.1-mini
+RECAP_MODEL=gpt-4o-mini
 ```
 
 ### Gemini CLI / Cursor CLI / Ollama

@@ -23,7 +23,11 @@ def chat_completion(
         logger.warning("openai package unavailable: %s", e)
         return _stub_from_messages(messages), "stub"
 
-    client = OpenAI(api_key=settings.openai_api_key, timeout=settings.timeout_s)
+    client = OpenAI(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url,
+        timeout=settings.timeout_s,
+    )
     resp = client.chat.completions.create(
         model=settings.model,
         messages=messages,  # type: ignore[arg-type]

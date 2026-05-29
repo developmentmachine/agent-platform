@@ -115,7 +115,10 @@ class OpenAiProvider:
 
         if not settings.openai_api_key:
             raise LlmError("缺少 OPENAI_API_KEY")
-        client = OpenAI(api_key=settings.openai_api_key)
+        client = OpenAI(
+            api_key=settings.openai_api_key,
+            base_url=settings.openai_base_url,
+        )
         recap_cls = RecapDaily if mode == "daily" else RecapStrategy
 
         msgs: List[Dict[str, Any]] = list(messages)  # type: ignore[arg-type]
