@@ -23,6 +23,7 @@ class RunContext:
     mode: Optional[str] = None
     provider: Optional[str] = None
     tenant_id: Optional[str] = None  # W5-2：多租户标识，None 表示「单租户/legacy」
+    agent_id: Optional[str] = None  # 当前执行的 Agent，与 AgentScope 对齐
 
     @staticmethod
     def new(
@@ -31,6 +32,7 @@ class RunContext:
         mode: Optional[str] = None,
         provider: Optional[str] = None,
         tenant_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
     ) -> RunContext:
         rid = str(uuid.uuid4())
         tid = uuid.uuid4().hex
@@ -43,6 +45,7 @@ class RunContext:
             mode=mode,
             provider=provider,
             tenant_id=tenant_id,
+            agent_id=agent_id,
         )
 
     def with_overrides(
@@ -51,11 +54,13 @@ class RunContext:
         mode: Optional[str] = None,
         provider: Optional[str] = None,
         tenant_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
     ) -> "RunContext":
-        """返回一个填好 mode/provider/tenant_id 的副本；任意 None 维持原值。"""
+        """返回一个填好 mode/provider/tenant_id/agent_id 的副本；任意 None 维持原值。"""
         return dataclasses.replace(
             self,
             mode=mode if mode is not None else self.mode,
             provider=provider if provider is not None else self.provider,
             tenant_id=tenant_id if tenant_id is not None else self.tenant_id,
+            agent_id=agent_id if agent_id is not None else self.agent_id,
         )

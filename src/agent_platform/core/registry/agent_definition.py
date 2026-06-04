@@ -4,7 +4,13 @@
 - 不限制 Agent 内部如何编排（可以是 Pipeline、可以是直接 LLM 调用、可以是 ReAct）；
 - 必须声明 ``request_model`` / ``response_model``，让 adapters 自动反序列化；
 - 通过 ``capabilities`` 声明能力，便于路由（"recap/daily" "chat" 等）；
-- 通过 ``mcp_tool_names`` 显式声明依赖的 MCP 工具，runtime 启动时校验。
+- **运行期裁剪**：``AgentScope``（``current_agent_scope``）在 ``agent_execution`` /
+  ``generate_once`` / ``AgentRuntime.run`` 内激活；MCP 暴露 =
+  平台工具池 ∩ ``mcp_tool_names``；skill overlay 仅读 ``skill_mode_map`` ∩ ``skills``。
+- **注册期校验**：``create_runtime`` 注入 ``validate_agent_dependencies``，在
+  ``AgentRegistry.register`` 前核对声明 ⊆ 全局池且与 bundle 一致。
+- ``skills`` / ``skill_mode_map`` 用 ``with_skill_bundle`` 推导（skill id 真源：
+  ``SKILL.md`` 的 ``name``；``manifest.json`` 只写 ``path``）。
 """
 from __future__ import annotations
 
@@ -86,9 +92,12 @@ class AgentDefinition:
     pipeline_factory: Optional[PipelineFactory] = None
     chat_handler: Optional[Callable[..., Any]] = None
     runner: Optional[Callable[..., Any]] = None
-    # 声明依赖（runtime 启动时校验）
+    # 依赖声明（见模块 docstring：由 create_runtime 注入的 register 钩子校验，非 AgentRuntime）
     mcp_tool_names: List[str] = field(default_factory=list)
+    # Skill：用 with_skill_bundle() 填充；skill_bundle 为 agent_platform.skills entry point 名
+    skill_bundle: Optional[str] = None
     skills: List[str] = field(default_factory=list)
+    skill_mode_map: Dict[str, str] = field(default_factory=dict)
     renderers: List[str] = field(default_factory=list)
     # 给 CLI / 路由 / LLM 看的简短描述
     cli_help: Optional[str] = None

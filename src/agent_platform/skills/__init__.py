@@ -7,24 +7,44 @@ Agent Skills 包（业界常见「manifest + SKILL.md」形态）。
 运行时由 ``agents.stock_recap.llm.prompts`` 将 skill 正文叠加进 system prompt。
 """
 
+from agent_platform.skills.bundle import (
+    SkillBundleEntry,
+    SkillBundleManifest,
+    enrich_bundle_manifest,
+    read_bundle_manifest,
+    resolve_skill_bundle_root,
+    resolve_skill_id_from_path,
+    with_skill_bundle,
+)
 from agent_platform.skills.loader import (
     SkillDocument,
     clear_skill_manifest_cache,
     list_registered_skills,
     list_skill_bundle_roots_resolved,
     load_skill_document,
+    load_skill_overlay_for_agent,
     load_skill_overlay_for_mode,
+    parse_skill_markdown,
     resolve_skill_id_for_mode,
     skill_bundle_version,
 )
 
 __all__ = [
+    "SkillBundleEntry",
+    "SkillBundleManifest",
+    "enrich_bundle_manifest",
+    "read_bundle_manifest",
+    "resolve_skill_bundle_root",
+    "resolve_skill_id_from_path",
+    "with_skill_bundle",
     "SkillDocument",
     "clear_skill_manifest_cache",
     "list_registered_skills",
     "list_skill_bundle_roots_resolved",
     "load_skill_document",
+    "load_skill_overlay_for_agent",
     "load_skill_overlay_for_mode",
+    "parse_skill_markdown",
     "resolve_skill_id_for_mode",
     "skill_bundle_version",
 ]

@@ -4,7 +4,8 @@
 - 用 ``runner`` 入口包装现有 ``generate_once`` / ``iter_generate_ndjson``；
 - 业务模型 (``GenerateRequest`` / ``GenerateResponse``) 仍住在 ``domain.models``，
   通过本 manifest 引用，保持兼容；
-- ``mcp_tool_names`` / ``skills`` 显式声明依赖，便于 runtime 启动校验；
+- ``mcp_tool_names`` 声明 MCP 依赖；Skill 经 ``with_skill_bundle`` 推导；二者在
+  ``create_runtime`` → ``AgentRegistry.register`` 时校验（非 ``AgentRuntime.run``）；
 - W6: ``cli_subparser_factory`` / ``cli_run_handler`` / ``http_router_factories``
   / ``scheduled_jobs`` 由本 manifest 声明，让 CLI / HTTP / Scheduler 装配器
   按 ``AgentRegistry`` 自动发现。
@@ -218,11 +219,13 @@ def _build_scheduled_jobs(settings: Any) -> List[ScheduledJob]:
 
 
 def _build_definition() -> AgentDefinition:
+    from agent_platform.agents.stock_recap.skills import bundle_root as skill_bundle_root
     from agent_platform.config.settings import get_settings
+    from agent_platform.skills.bundle import with_skill_bundle
 
     # 调度任务的 cron 字段依赖运行时 settings；这里 lazy 解析仅在 build 时一次。
     settings = get_settings()
-    return AgentDefinition(
+    defn = AgentDefinition(
         id=AGENT_ID,
         display_name="A 股复盘智能体",
         description=_DESCRIPTION,
@@ -236,7 +239,6 @@ def _build_definition() -> AgentDefinition:
         ],
         runner=_runner,
         mcp_tool_names=["web_search", "query_market_data", "query_history"],
-        skills=["a_share_daily_recap", "a_share_strategy_nextday"],
         renderers=["markdown", "wechat_text"],
         cli_help="A 股日终复盘 / 次日策略",
         http_path_prefix="/v1/recap",
@@ -244,6 +246,11 @@ def _build_definition() -> AgentDefinition:
         cli_run_handler=_cli_run,
         http_router_factories=[_http_routers],
         scheduled_jobs=_build_scheduled_jobs(settings),
+    )
+    return with_skill_bundle(
+        defn,
+        bundle_key="stock-recap",
+        bundle_root=skill_bundle_root(),
     )
 
 

@@ -6,7 +6,8 @@
    b. ``discover_agents()``：第三方包 entry_points；
 2. 初始化 SessionResolver（默认 stateless）、SideEffectBus；
 3. 注入可选 overrides；
-4. 返回 ``AgentRuntime``。
+4. 向 ``AgentRegistry`` 注入 ``validate_agent_dependencies``，再 ``register`` 各 Agent；
+5. 返回 ``AgentRuntime``（运行期不再校验 ``mcp_tool_names`` / ``skills`` 声明）。
 """
 from __future__ import annotations
 
@@ -21,6 +22,7 @@ from agent_platform.core.registry.agent_registry import (
     get_default_registry,
 )
 from agent_platform.runtime.agent_runtime import AgentRuntime, AgentRuntimeOverrides
+from agent_platform.runtime.agent_validation import validate_agent_dependencies
 from agent_platform.runtime.session_resolver import StatelessSessionResolver
 
 logger = logging.getLogger("agent_platform.runtime.factory")
@@ -34,11 +36,12 @@ def create_runtime(
     auto_discover: bool = True,
     register_builtins: bool = True,
 ) -> AgentRuntime:
-    """实例化 AgentRuntime 并完成注册表装配。"""
+    """实例化 AgentRuntime 并完成注册表装配（含 Agent 依赖声明校验）。"""
     settings = settings or get_settings()
     overrides = overrides or AgentRuntimeOverrides()
 
     reg = registry or get_default_registry()
+    reg.set_dependency_validator(validate_agent_dependencies)
 
     if register_builtins:
         _register_builtin_agents(reg)

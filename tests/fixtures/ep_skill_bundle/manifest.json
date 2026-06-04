@@ -5,7 +5,6 @@
   },
   "skills": [
     {
-      "id": "ep.strategy_skill",
       "path": "strategy_plugin/SKILL.md",
       "description": "entry point 测试用 skill"
     }

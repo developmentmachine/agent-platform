@@ -1,5 +1,5 @@
 ---
-name: EP Strategy Plugin
+name: ep.strategy_skill
 description: from entry point
 version: "0.0.1"
 ---

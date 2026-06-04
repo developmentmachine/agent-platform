@@ -7,7 +7,8 @@
 - ``shutdown``：清理 disposers（MCP 子进程、连接池等）。
 
 对应 ares-pkx ``AgentRuntime`` 的 Python 实现；保持 surface 极简，所有装配
-都收口到 ``create_runtime``。
+都收口到 ``create_runtime``（含 ``mcp_tool_names`` / ``skills`` 依赖校验，在
+注册表 ``register`` 阶段完成，本类 ``run`` / ``stream`` 不再校验）。
 """
 from __future__ import annotations
 
@@ -29,6 +30,7 @@ from agent_platform.core.registry.agent_registry import AgentRegistry
 from agent_platform.core.runtime.principal import PrincipalContext
 from agent_platform.core.runtime.run_context import RunContext
 from agent_platform.core.runtime.session import SessionContext
+from agent_platform.runtime.scope import agent_execution
 
 logger = logging.getLogger("agent_platform.runtime.agent_runtime")
 
@@ -100,31 +102,33 @@ class AgentRuntime:
         trace_id: Optional[str] = None,
     ) -> AgentResponseEnvelope:
         defn, session, run_ctx = self._prepare(agent_id, principal, conversation_key, trace_id)
-        if defn.runner is not None:
-            return defn.runner(
-                envelope=AgentRequestEnvelope(agent_id=agent_id, payload=payload, stream=False),
-                principal=principal,
-                session=session,
-                run_ctx=run_ctx,
-                settings=self._settings,
-                runtime=self,
-            )
-        if defn.chat_handler is not None:
-            out = defn.chat_handler(
-                request=defn.request_model.model_validate(payload),
-                principal=principal,
-                session=session,
-                run_ctx=run_ctx,
-                settings=self._settings,
-                runtime=self,
-            )
-            return self._wrap_response(defn, run_ctx, out)
-        if defn.pipeline_factory is not None:
-            raise NotImplementedError(
-                "pipeline-based agents must implement their own ``runner`` to drive the "
-                "Pipeline + RunState (stock-recap migration pending in follow-up commit)"
-            )
-        raise AgentNotFound(f"agent {agent_id!r} has no callable entrypoint")
+        run_ctx = run_ctx.with_overrides(agent_id=agent_id)
+        with agent_execution(defn):
+            if defn.runner is not None:
+                return defn.runner(
+                    envelope=AgentRequestEnvelope(agent_id=agent_id, payload=payload, stream=False),
+                    principal=principal,
+                    session=session,
+                    run_ctx=run_ctx,
+                    settings=self._settings,
+                    runtime=self,
+                )
+            if defn.chat_handler is not None:
+                out = defn.chat_handler(
+                    request=defn.request_model.model_validate(payload),
+                    principal=principal,
+                    session=session,
+                    run_ctx=run_ctx,
+                    settings=self._settings,
+                    runtime=self,
+                )
+                return self._wrap_response(defn, run_ctx, out)
+            if defn.pipeline_factory is not None:
+                raise NotImplementedError(
+                    "pipeline-based agents must implement their own ``runner`` to drive the "
+                    "Pipeline + RunState (stock-recap migration pending in follow-up commit)"
+                )
+            raise AgentNotFound(f"agent {agent_id!r} has no callable entrypoint")
 
     def stream(
         self,
@@ -136,18 +140,20 @@ class AgentRuntime:
         trace_id: Optional[str] = None,
     ) -> Iterator[Dict[str, Any]]:
         defn, session, run_ctx = self._prepare(agent_id, principal, conversation_key, trace_id)
+        run_ctx = run_ctx.with_overrides(agent_id=agent_id)
         if defn.runner is None:
             raise NotImplementedError(
                 f"agent {agent_id!r} does not support streaming (no ``runner`` defined)"
             )
-        yield from defn.runner(
-            envelope=AgentRequestEnvelope(agent_id=agent_id, payload=payload, stream=True),
-            principal=principal,
-            session=session,
-            run_ctx=run_ctx,
-            settings=self._settings,
-            runtime=self,
-        )
+        with agent_execution(defn):
+            yield from defn.runner(
+                envelope=AgentRequestEnvelope(agent_id=agent_id, payload=payload, stream=True),
+                principal=principal,
+                session=session,
+                run_ctx=run_ctx,
+                settings=self._settings,
+                runtime=self,
+            )
 
     # ─── lifecycle ────────────────────────────────────────────────────────
 

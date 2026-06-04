@@ -55,7 +55,8 @@ LLM 被要求输出 **JSON**，并校验为 **Pydantic 模型**：
 ### 2.4 Prompt 版本与 Skill
 
 - **prompt_version**：由 manifest 基础版本 + 进化模块可能 bump 的 `vN` 组成；用于追溯「当时用的是哪套指令」。
-- **Skill**（`skills/` + `resources/prompts/`）：按 `mode` 叠加的额外指令文本，支持 `RECAP_SKILL_ID` 覆盖映射，便于 A/B。
+- **Skill overlay**：在 `generate_once` 内按 **stock-recap 的 `AgentScope.skill_mode_map`** 选 skill（如 `daily` → `a_share.daily_recap`），正文从全局 skill 目录加载；id 真源为各 `SKILL.md` 的 `name`。支持 `RECAP_SKILL_ID` 覆盖（须在 Agent `skills` 白名单内）。
+- **平台级约定**（多 Agent / MCP 裁剪）见 [ARCHITECTURE.md §6.1–6.2](ARCHITECTURE.md)。
 
 ---
 

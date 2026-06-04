@@ -14,6 +14,10 @@ class AgentNotFound(PlatformError):
     """注册表中找不到指定 agent_id。"""
 
 
+class AgentDependencyError(PlatformError):
+    """Agent 声明的 skill / MCP 依赖与平台登记不一致。"""
+
+
 class PipelinePhaseError(PlatformError):
     """Phase 执行内出现的预期内异常（与 transport 错误区分）。"""
 

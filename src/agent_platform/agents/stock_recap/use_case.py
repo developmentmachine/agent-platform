@@ -20,6 +20,9 @@ from agent_platform.config.settings import Settings
 from agent_platform.domain.models import GenerateRequest, GenerateResponse
 from agent_platform.domain.run_context import RunContext
 from agent_platform.observability.runtime_context import current_budget, current_run_context
+from agent_platform.runtime.scope import agent_execution
+
+_RECAP_AGENT_ID = "stock-recap"
 from agent_platform.observability.tracing import configure_tracing, get_tracer
 from agent_platform.policy.guardrails import validate_generate_request
 
@@ -51,43 +54,47 @@ def generate_once(
     configure_tracing(settings)
     validate_generate_request(req)
 
-    run_ctx = (ctx or RunContext.new()).with_overrides(
-        mode=req.mode,
-        provider=str(req.provider),
-        tenant_id=_current_tenant_id(),
-    )
-    request_id = run_ctx.request_id
-    t0 = time.time()
-    ctx_token = current_run_context.set(run_ctx)
-    tracer = get_tracer(__name__)
+    from agent_platform.agents.stock_recap.manifest import _build_definition
 
-    state = RecapAgentRunState(
-        request=req,
-        settings=settings,
-        run_ctx=run_ctx,
-        t0=t0,
-        defer_evolution_backtest=defer_evolution_backtest,
-    )
-    budget_token = current_budget.set(state.budget)
+    with agent_execution(_build_definition()):
+        run_ctx = (ctx or RunContext.new()).with_overrides(
+            mode=req.mode,
+            provider=str(req.provider),
+            tenant_id=_current_tenant_id(),
+            agent_id=_RECAP_AGENT_ID,
+        )
+        request_id = run_ctx.request_id
+        t0 = time.time()
+        ctx_token = current_run_context.set(run_ctx)
+        tracer = get_tracer(__name__)
 
-    try:
-        with tracer.start_as_current_span(
-            "recap.generate",
-            attributes={
-                "recap.request_id": request_id,
-                "recap.trace_id": run_ctx.trace_id,
-                "recap.mode": req.mode,
-                "recap.provider": str(req.provider),
-            },
-        ):
-            if run_ctx.session_id:
-                span = trace.get_current_span()
-                span.set_attribute("recap.session_id", run_ctx.session_id)
+        state = RecapAgentRunState(
+            request=req,
+            settings=settings,
+            run_ctx=run_ctx,
+            t0=t0,
+            defer_evolution_backtest=defer_evolution_backtest,
+        )
+        budget_token = current_budget.set(state.budget)
 
-            return execute_recap_pipeline(state)
-    finally:
-        current_budget.reset(budget_token)
-        current_run_context.reset(ctx_token)
+        try:
+            with tracer.start_as_current_span(
+                "recap.generate",
+                attributes={
+                    "recap.request_id": request_id,
+                    "recap.trace_id": run_ctx.trace_id,
+                    "recap.mode": req.mode,
+                    "recap.provider": str(req.provider),
+                },
+            ):
+                if run_ctx.session_id:
+                    span = trace.get_current_span()
+                    span.set_attribute("recap.session_id", run_ctx.session_id)
+
+                return execute_recap_pipeline(state)
+        finally:
+            current_budget.reset(budget_token)
+            current_run_context.reset(ctx_token)
 
 
 def iter_generate_ndjson(
@@ -107,46 +114,45 @@ def iter_generate_ndjson(
     configure_tracing(settings)
     validate_generate_request(req)
 
-    run_ctx = (ctx or RunContext.new()).with_overrides(
-        mode=req.mode,
-        provider=str(req.provider),
-        tenant_id=_current_tenant_id(),
-    )
-    request_id = run_ctx.request_id
-    t0 = time.time()
-    # 在 stream 路径上同样把 RunContext 写到 ContextVar，确保各 phase 内日志能拿到 ctx。
-    # 用 set/restore 模式避免跨线程 reset(token) 抛 ValueError。
-    prev_ctx = current_run_context.get()
-    current_run_context.set(run_ctx)
+    from agent_platform.agents.stock_recap.manifest import _build_definition
 
-    state = RecapAgentRunState(
-        request=req,
-        settings=settings,
-        run_ctx=run_ctx,
-        t0=t0,
-        defer_evolution_backtest=defer_evolution_backtest,
-    )
-    # 流式路径下，生成器可能跨线程恢复，``ContextVar.reset(token)`` 会抛
-    # ``ValueError: Token was created in a different Context``；改用「保存→写回」
-    # 模式（``set`` 不需要 Token，跨上下文也不会抛）。
-    prev_budget = current_budget.get()
-    current_budget.set(state.budget)
-    try:
-        yield from iter_recap_agent_ndjson(state)
-    finally:
-        current_budget.set(prev_budget)
-        current_run_context.set(prev_ctx)
-    if (
-        defer_evolution_backtest
-        and state.stream_pipeline_completed
-        and state.snapshot is not None
-    ):
-        run_deferred_post_recap(
-            request_id,
-            req.mode,
-            state.snapshot.date,
-            state.recap is not None,
+    with agent_execution(_build_definition()):
+        run_ctx = (ctx or RunContext.new()).with_overrides(
+            mode=req.mode,
+            provider=str(req.provider),
+            tenant_id=_current_tenant_id(),
+            agent_id=_RECAP_AGENT_ID,
         )
+        request_id = run_ctx.request_id
+        t0 = time.time()
+        prev_ctx = current_run_context.get()
+        current_run_context.set(run_ctx)
+
+        state = RecapAgentRunState(
+            request=req,
+            settings=settings,
+            run_ctx=run_ctx,
+            t0=t0,
+            defer_evolution_backtest=defer_evolution_backtest,
+        )
+        prev_budget = current_budget.get()
+        current_budget.set(state.budget)
+        try:
+            yield from iter_recap_agent_ndjson(state)
+        finally:
+            current_budget.set(prev_budget)
+            current_run_context.set(prev_ctx)
+        if (
+            defer_evolution_backtest
+            and state.stream_pipeline_completed
+            and state.snapshot is not None
+        ):
+            run_deferred_post_recap(
+                request_id,
+                req.mode,
+                state.snapshot.date,
+                state.recap is not None,
+            )
 
 
 # 对 cli/scheduler 的后向兼容别名（保持旧导入 `from application.recap import _try_run_backtest` 有效）。

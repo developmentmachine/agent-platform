@@ -1,6 +1,6 @@
 # 05 · 多租户：per-user MCP / per-user Skill
 
-> **状态**：agent-platform 已有 `domain/principal.py` 这个用户上下文，但 `tools/registry.py`、`skills/loader.py` 都是**全局单例**，没有 per-user 维度。本专题补齐"每个用户挂自己的工具/技能"能力。
+> **状态**：平台已有 `domain/principal.py`、`AgentScope`（按 Agent 裁剪 MCP/skill 选用）。**尚未**做 per-user 合并工具/技能目录。本专题补齐「每个用户挂自己的工具/技能」能力。
 
 ## 1. 背景
 

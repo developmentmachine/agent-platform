@@ -73,6 +73,11 @@ def skill_bundle_version() -> str:
     return str(_base_manifest().get("bundle_version", "0"))
 
 
+def parse_skill_markdown(raw: str) -> Tuple[Dict[str, str], str]:
+    """解析 ``SKILL.md`` 文本（frontmatter + body），供 bundle 校验与 ``load_skill_document`` 共用。"""
+    return _parse_frontmatter(raw)
+
+
 def _parse_frontmatter(raw: str) -> Tuple[Dict[str, str], str]:
     """解析可选 YAML-like frontmatter（简单 ``key: value`` 行），无 PyYAML 依赖。"""
     text = raw.strip()
@@ -174,7 +179,10 @@ def _load_bundle_manifest(root: Path) -> Dict[str, Any]:
     mf = root / "manifest.json"
     if not mf.is_file():
         raise FileNotFoundError(f"missing manifest.json under {root}")
-    return json.loads(mf.read_text(encoding="utf-8"))
+    from agent_platform.skills.bundle import enrich_bundle_manifest
+
+    raw = json.loads(mf.read_text(encoding="utf-8"))
+    return enrich_bundle_manifest(root, raw)
 
 
 def _merge_manifests(
@@ -264,7 +272,7 @@ def load_skill_document(skill_id: str) -> Optional[SkillDocument]:
     except Exception as e:
         logger.warning("failed to read skill %s: %s", skill_id, e)
         return None
-    meta, body = _parse_frontmatter(raw)
+    meta, body = parse_skill_markdown(raw)
     return SkillDocument(
         skill_id=skill_id,
         name=meta.get("name", skill_id),
@@ -275,7 +283,7 @@ def load_skill_document(skill_id: str) -> Optional[SkillDocument]:
 
 
 def resolve_skill_id_for_mode(mode: Mode, override_skill_id: Optional[str] = None) -> Optional[str]:
-    """由运行 mode（或覆盖 id）得到 manifest 中的 skill_id。"""
+    """全局合并 manifest 的 mode→id（仅用于目录/合并测试，**不**用于 Agent prompt overlay）。"""
     if override_skill_id:
         return override_skill_id
     m = _merged_manifest().get("mode_to_skill_id") or {}
@@ -283,18 +291,37 @@ def resolve_skill_id_for_mode(mode: Mode, override_skill_id: Optional[str] = Non
     return str(sid) if sid else None
 
 
-def load_skill_overlay_for_mode(
+def load_skill_overlay_for_agent(
+    scope: "AgentScope",
     mode: Mode,
     override_skill_id: Optional[str] = None,
 ) -> Optional[SkillDocument]:
-    """返回当前 mode 应注入 system prompt 的 skill 文档（无则 None）。"""
-    sid = resolve_skill_id_for_mode(mode, override_skill_id=override_skill_id)
+    """按 Agent 作用域 + mode 加载 skill 正文（运行期 overlay 唯一入口）。"""
+    from agent_platform.core.runtime.agent_scope import resolve_skill_id_for_agent
+
+    sid = resolve_skill_id_for_agent(scope, mode, override_skill_id=override_skill_id)
     if not sid:
         return None
     doc = load_skill_document(sid)
     if doc is None or not doc.body.strip():
         return None
     return doc
+
+
+def load_skill_overlay_for_mode(
+    mode: Mode,
+    override_skill_id: Optional[str] = None,
+) -> Optional[SkillDocument]:
+    """返回当前 mode 应注入 system prompt 的 skill 文档；要求已激活 ``AgentScope``。"""
+    from agent_platform.core.runtime.agent_scope import current_agent_scope
+
+    scope = current_agent_scope.get()
+    if scope is None:
+        raise RuntimeError(
+            "load_skill_overlay_for_mode requires an active AgentScope; "
+            "run inside agent_execution() or AgentRuntime.run()"
+        )
+    return load_skill_overlay_for_agent(scope, mode, override_skill_id=override_skill_id)
 
 
 def list_registered_skills() -> List[Dict[str, Any]]:

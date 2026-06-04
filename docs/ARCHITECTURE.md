@@ -36,8 +36,8 @@
                           ↓ AgentRuntime.run / stream
  ┌──────────────────────────────────────────────────────────┐
  │ Runtime  (Composition Root)                              │
- │  AgentRuntime · create_runtime · SessionResolver         │
- │  Observability · Lifecycle                               │
+ │  AgentRuntime · create_runtime · AgentScope 裁剪         │
+ │  validate_agent_dependencies · SessionResolver           │
  └────────────────────────┬─────────────────────────────────┘
                           ↓ AgentDefinition.runner / pipeline
  ┌──────────────────────────────────────────────────────────┐
@@ -71,7 +71,8 @@
 | 包 | 角色 | 关键内容 |
 |----|------|----------|
 | `core/` | 平台契约层 | `ports/` · `runtime/` · `orchestration/` · `registry/` · `errors` |
-| `runtime/` | Composition Root | `factory.create_runtime` · `AgentRuntime` · `StatelessSessionResolver` |
+| `runtime/` | Composition Root | `create_runtime` · `AgentRuntime` · `scope.agent_execution` · `agent_validation` |
+| `core/runtime/agent_scope.py` | 运行期白名单 | `AgentScope` · `current_agent_scope`（MCP ∩ 声明、skill 按 Agent mode 表） |
 | `infra/` | Driven Adapters | `llm/` · `mcp_client/` · `persistence/` · `memory/` · `push/` · `guardrail/` |
 | `tools_server/` | 独立 MCP server | `server.py` · `handlers/` |
 | `agents/<id>/` | 业务 Agent（互相隔离） | `manifest.py` · `domain/` · `phases/` · `prompts/` · `skills/` |
@@ -107,10 +108,10 @@ core             ↛ 任何上层
 |--------|--------|------|
 | **新 Agent** | 新建 `agents/<id>/manifest.py`，导出 `register(reg)`；可选 entry_point | `stock-recap` |
 | **新 LLM 后端** | 实现 `LlmBackendPort`，在 `infra/llm/providers` 注册 | `openai` / `ollama` |
-| **新工具** | 在 `tools_server/handlers/` 加 handler，通过 MCP 自动可用 | `web_search` |
+| **新工具** | `tools_server/tools/` 登记 SPEC；进入全局 MCP 池 | `web_search` |
 | **新接入入口** | 在 `adapters/<x>/` 实现 connector，统一调 `runtime.run(...)` | `wecom` / `qq` |
 | **新 Renderer** | 实现 `RendererPort`，在 Agent manifest 中声明 | `wechat_text` |
-| **新 Skill** | 包内或外部 bundle，通过 `agent_platform.skills` entry_point 注入 | 已有机制 |
+| **新 Skill** | `SKILL.md` 的 `name` 为 id；`manifest.json` 只写 `path`；entry_point + `with_skill_bundle` | stock-recap bundle |
 | **新副作用** | Agent 在注册时通过 `SideEffectBus.subscribe(event, handler)` | `evolution` / `push` |
 
 ---
@@ -119,25 +120,49 @@ core             ↛ 任何上层
 
 ### 6.1 `AgentDefinition` + `AgentRegistry`
 
+**依赖与运行期裁剪**：
+
+- **注册时**：`create_runtime()` 注入 `validate_agent_dependencies`，`register()` 前核对声明 ⊆ 全局 skill/MCP 池。
+- **运行时**：`AgentScope`（`current_agent_scope`）在 `agent_execution()` / `generate_once` / `AgentRuntime.run()` 激活；MCP = 平台已启用工具 ∩ 该 Agent 的 `mcp_tool_names`；skill overlay = 该 Agent 的 `skill_mode_map`（正文仍从全局 skill 目录按 id 加载）。全局合并的 `mode_to_skill_id` 仅用于目录/运维，**不**驱动 Agent prompt。
+
 ```python
-# 注册一个 Agent
+# 推荐：经 create_runtime 注册（内置校验）
+from agent_platform.runtime import create_runtime
+
+runtime = create_runtime()  # 内部 register 内置/发现的 Agent 时已校验依赖
+
+# 第三方 Agent manifest 示例
 from agent_platform.core.registry import AgentDefinition, AgentRegistry, AgentCapability
+from agent_platform.skills.bundle import with_skill_bundle
 
 def register(reg: AgentRegistry) -> None:
-    reg.register(AgentDefinition(
+    defn = AgentDefinition(
         id="my-agent",
         display_name="My Agent",
         description="...",
         request_model=MyRequest,
         response_model=MyResponse,
-        capabilities=[AgentCapability.CHAT, AgentCapability.STREAMING],
-        runner=my_runner,                     # 或 chat_handler / pipeline_factory
-        mcp_tool_names=["web_search"],
-        skills=["my_skill"],
-    ))
+        capabilities=[AgentCapability.CHAT, AgentCapability.TOOL_USING],
+        runner=my_runner,
+        mcp_tool_names=["web_search"],  # 须在 tools_server 中存在
+    )
+    reg.register(with_skill_bundle(defn, bundle_key="my-agent"))  # skills 从 SKILL.md 自动识别
 ```
 
-### 6.2 `Pipeline[StateT]` + `Phase[StateT]`
+业务入口须在 **`agent_execution(defn)`** 或 `generate_once` / `AgentRuntime.run` 内激活 `AgentScope`；否则 skill overlay 与 MCP 裁剪不生效。
+
+### 6.2 Skills 与 MCP：全局池 + Agent 白名单
+
+| 资源 | 全局池（登记 / 目录） | Agent 声明（`AgentDefinition`） | 运行期（`AgentScope`） |
+|------|----------------------|----------------------------------|------------------------|
+| **MCP 工具** | `tools_server/registry.py` | `mcp_tool_names` | 暴露给 LLM = 平台已启用 ∩ `mcp_tool_names`；`execute` 越权拒绝 |
+| **Skill 正文** | `skills.loader` 合并各 bundle（按 id 读文件） | `skills` + `skill_mode_map`（`with_skill_bundle` 填充） | overlay 只用本 Agent 的 `skill_mode_map`，不用全局 `mode_to_skill_id` |
+
+**Skill id 真源**：各 `SKILL.md` frontmatter 的 `name`；`manifest.json` 的 `skills[]` **只写 `path`**（禁止写 `id`，加载时自动解析）。
+
+**`RECAP_SKILL_EXTRA_DIRS`**：向全局 skill **目录**追加条目；要改变某 Agent 的 mode→skill 映射，改该 Agent 的 bundle 或 `RECAP_SKILL_ID`（须在 `skills` 白名单内）。
+
+### 6.3 `Pipeline[StateT]` + `Phase[StateT]`
 
 ```python
 from agent_platform.core.orchestration import Pipeline, Phase
@@ -152,7 +177,7 @@ pipeline.execute(state)            # 同步
 list(pipeline.stream(state))       # NDJSON 流
 ```
 
-### 6.3 `SideEffectBus`
+### 6.4 `SideEffectBus`
 
 ```python
 from agent_platform.core.orchestration import SideEffectBus, StandardEvent
@@ -162,7 +187,7 @@ bus.subscribe(StandardEvent.RUN_COMPLETED, lambda ctx: push_to_wecom(ctx))
 bus.subscribe(StandardEvent.RUN_PERSISTED, lambda ctx: run_backtest(ctx))
 ```
 
-### 6.4 `AgentRuntime`
+### 6.5 `AgentRuntime`
 
 ```python
 from agent_platform.runtime import create_runtime

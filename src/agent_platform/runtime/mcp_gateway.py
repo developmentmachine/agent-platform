@@ -9,8 +9,8 @@
 3. ``prefetch_for_prompt(date)``   → 对预取场景批量调用，与单次 execute 同治理。
 
 设计原则：
-- 该 gateway 由 Composition Root 装配并通过 ContextVar / 依赖注入下发；
-- 不依赖任何 Agent；任何 Agent 都能复用。
+- 该 gateway 由 Composition Root 装配并通过 ContextVar 下发；
+- 运行期通过 ``current_agent_scope`` 与 ``AgentDefinition.mcp_tool_names`` 求交裁剪（无 scope 时不裁剪，仅单测）。
 """
 from __future__ import annotations
 
@@ -161,8 +161,19 @@ class McpToolGateway:
             return True
         return bool(getattr(self._settings, flag, False))
 
+    def _agent_mcp_allowlist(self) -> Optional[Set[str]]:
+        try:
+            from agent_platform.core.runtime.agent_scope import current_agent_scope
+
+            scope = current_agent_scope.get()
+        except Exception:
+            scope = None
+        if scope is None:
+            return None
+        return set(scope.mcp_tool_names)
+
     def enabled_tool_names(self) -> Set[str]:
-        """允许条件 = 总开关 ∩ Settings.tools_* ∩ ToolPolicy.enabled ∩ 角色满足。"""
+        """允许条件 = 平台策略 ∩ 当前 Agent ``mcp_tool_names``（若有 AgentScope）。"""
         if not self._settings.tools_enabled:
             return set()
         principal = _resolve_principal_role(self._settings)
@@ -170,7 +181,6 @@ class McpToolGateway:
         names: Set[str] = set()
         for name in self._policy_registry.names():
             if name not in descriptors:
-                # Policy 注册了但 MCP server 不提供 — 静默跳过（不抛 ToolNotRegistered）
                 continue
             if not self._settings_flag_on(name):
                 continue
@@ -180,6 +190,9 @@ class McpToolGateway:
             if not policy.is_role_allowed(principal):
                 continue
             names.add(name)
+        agent_allow = self._agent_mcp_allowlist()
+        if agent_allow is not None:
+            names &= agent_allow
         return names
 
     def openai_compatible_schemas(self) -> List[Dict[str, Any]]:
@@ -247,7 +260,26 @@ class McpToolGateway:
             )
             raise err
 
-        # 3) 角色
+        # 3) Agent 白名单
+        agent_allow = self._agent_mcp_allowlist()
+        if agent_allow is not None and name not in agent_allow:
+            err = ToolForbidden(
+                f"tool '{name}' is not allowed for the current agent scope"
+            )
+            self._audit(
+                request_id=request_id,
+                tool_name=name,
+                status="denied",
+                read_only=policy.read_only,
+                principal_role=principal,
+                tenant_id=tenant_id,
+                arguments=arguments,
+                latency_ms=0,
+                error=str(err),
+            )
+            raise err
+
+        # 4) 角色
         if not policy.is_role_allowed(principal):
             err = ToolForbidden(
                 f"tool '{name}' requires role '{policy.required_role}', "
@@ -266,7 +298,7 @@ class McpToolGateway:
             )
             raise err
 
-        # 4) per-tool budget
+        # 5) per-tool budget
         if policy.max_calls_per_run > 0:
             used = self._per_tool_used.get(name, 0)
             if used + 1 > policy.max_calls_per_run:
@@ -284,7 +316,7 @@ class McpToolGateway:
                 )
                 raise err
 
-        # 5) 全局 AgentBudget
+        # 6) 全局 AgentBudget
         budget = current_budget.get()
         if budget is not None:
             try:
@@ -303,7 +335,7 @@ class McpToolGateway:
                 )
                 raise
 
-        # 6) 真正调用 MCP client
+        # 7) 真正调用 MCP client
         self._per_tool_used[name] = self._per_tool_used.get(name, 0) + 1
         t0 = time.monotonic()
         timeout_s = float(policy.timeout_s) if policy.timeout_s and policy.timeout_s > 0 else None

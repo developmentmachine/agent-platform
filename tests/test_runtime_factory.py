@@ -13,6 +13,9 @@ def test_create_runtime_registers_stock_recap():
     assert defn.id == "stock-recap"
     assert defn.runner is not None
     assert "web_search" in defn.mcp_tool_names
+    assert defn.skill_bundle == "stock-recap"
+    assert "a_share.daily_recap" in defn.skills
+    assert defn.skill_mode_map.get("daily") == "a_share.daily_recap"
 
 
 def test_create_runtime_lists_agents():

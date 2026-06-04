@@ -4,10 +4,12 @@ from __future__ import annotations
 from typing import List
 
 from agent_platform.agents.hsk30_tutor.llm_client import chat_completion
+from agent_platform.agents.hsk30_tutor.manifest import AGENT_ID
 from agent_platform.agents.hsk30_tutor.models import TutorChatRequest, TutorChatResponse
 from agent_platform.agents.hsk30_tutor.prompts import build_system_prompt
 from agent_platform.config.settings import Settings
 from agent_platform.core.runtime.run_context import RunContext
+from agent_platform.core.runtime.agent_scope import AgentScope, current_agent_scope
 
 
 def chat_turn(
@@ -16,7 +18,26 @@ def chat_turn(
     *,
     ctx: RunContext | None = None,
 ) -> TutorChatResponse:
-    run_ctx = ctx or RunContext.new()
+    scope = AgentScope(
+        agent_id=AGENT_ID,
+        mcp_tool_names=frozenset(),
+        skill_ids=frozenset(),
+        skill_mode_map={},
+    )
+    token = current_agent_scope.set(scope)
+    try:
+        return _chat_turn_scoped(req, settings, ctx=ctx)
+    finally:
+        current_agent_scope.reset(token)
+
+
+def _chat_turn_scoped(
+    req: TutorChatRequest,
+    settings: Settings,
+    *,
+    ctx: RunContext | None = None,
+) -> TutorChatResponse:
+    run_ctx = (ctx or RunContext.new()).with_overrides(agent_id=AGENT_ID)
     messages: List[dict[str, str]] = [
         {
             "role": "system",

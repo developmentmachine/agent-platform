@@ -266,6 +266,8 @@ RECAP_MODEL=gpt-4o-mini
 
 ### MCP 工具（stock-recap）
 
+平台维护**全局 MCP 工具池**（`tools_server`）；每个 Agent 在 manifest 声明 `mcp_tool_names`，运行期只暴露该 Agent 允许的子集（`stock-recap` 为三个行情/搜索工具）。
+
 ```bash
 RECAP_TOOLS_ENABLED=true
 RECAP_TOOLS_WEB_SEARCH=true
@@ -274,6 +276,8 @@ RECAP_TOOLS_HISTORY=true
 ```
 
 独立 MCP 进程：`uv run agent-platform --mcp-tools`（或 `uv run stock-recap-mcp` / `agent-platform-tools-mcp`）。
+
+Skill：id 写在各 `SKILL.md` 的 `name`；`agents/stock_recap/skills/manifest.json` 只登记 `path` 与 `mode_to_skill_id`。详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §6.2。
 
 ---
 

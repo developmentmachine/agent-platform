@@ -13,10 +13,11 @@ from agent_platform.observability.runtime_context import (  # noqa: F401
     current_budget,
     current_run_context,
 )
+from agent_platform.core.runtime.agent_scope import current_agent_scope  # noqa: F401
 
 current_principal: contextvars.ContextVar[Optional[PrincipalContext]] = contextvars.ContextVar(
     "agent_platform_principal",
     default=None,
 )
 
-__all__ = ["current_run_context", "current_budget", "current_principal"]
+__all__ = ["current_run_context", "current_budget", "current_principal", "current_agent_scope"]

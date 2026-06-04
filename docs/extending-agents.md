@@ -48,20 +48,22 @@
 
 ## 三、manifest 最小示例
 
+### 3.1 纯对话 Agent（无 MCP / 无 Skill）
+
 ```python
 from agent_platform.core.registry.agent_definition import (
-    AgentDefinition,
     AgentCapability,
-    AgentRequestEnvelope,
-    AgentResponseEnvelope,
+    AgentDefinition,
 )
 from agent_platform.core.registry.agent_registry import AgentRegistry
 
 AGENT_ID = "my-agent"
 
+
 def _runner(*, envelope, principal, session, run_ctx, settings, runtime):
     # envelope.payload → 业务逻辑 → AgentResponseEnvelope
     ...
+
 
 def register(registry: AgentRegistry) -> None:
     registry.register(
@@ -73,14 +75,119 @@ def register(registry: AgentRegistry) -> None:
             response_model=MyResponse,
             capabilities=[AgentCapability.CHAT],
             runner=_runner,
+            mcp_tool_names=[],  # 无工具
             cli_help="一句话 help",
             http_path_prefix="/v1/my-agent",
-            cli_subparser_factory=_cli_subparser,  # agents/my_agent/cli.py
+            cli_subparser_factory=_cli_subparser,
             cli_run_handler=_cli_run,
             http_router_factories=[lambda: [my_router]],
         )
     )
 ```
+
+`use_case` 入口须激活 `AgentScope`（`AgentRuntime.run` 已内置；直连 `use_case` 时自行包一层）：
+
+```python
+from agent_platform.runtime.scope import agent_execution
+
+def chat_turn(req, settings, *, ctx=None):
+    with agent_execution(_definition_for_registry()):  # 或缓存 manifest 里的 AgentDefinition
+        ...
+```
+
+### 3.2 带 MCP + Skill bundle（报告 / 工具型）
+
+**目录**（示例）：
+
+```
+agents/my_agent/
+  manifest.py
+  skills/
+    manifest.json          # 只写 path + mode_to_skill_id，不写 id
+    daily_task/SKILL.md    # frontmatter name: my_agent.daily  ← skill id 真源
+  ...
+```
+
+`skills/manifest.json`：
+
+```json
+{
+  "bundle_version": "1.0.0",
+  "mode_to_skill_id": { "daily": "my_agent.daily" },
+  "skills": [{ "path": "daily_task/SKILL.md", "description": "日终任务规程" }]
+}
+```
+
+`pyproject.toml`（与 `stock-recap` 相同模式）：
+
+```toml
+[project.entry-points."agent_platform.agents"]
+my-agent = "agent_platform.agents.my_agent.manifest:register"
+
+[project.entry-points."agent_platform.skills"]
+my-agent = "agent_platform.agents.my_agent.skills:bundle_root"
+```
+
+`agents/my_agent/skills/__init__.py`：
+
+```python
+from pathlib import Path
+
+def bundle_root() -> Path:
+    return Path(__file__).resolve().parent
+```
+
+`manifest.py`：
+
+```python
+from agent_platform.agents.my_agent.skills import bundle_root
+from agent_platform.core.registry.agent_definition import (
+    AgentCapability,
+    AgentDefinition,
+)
+from agent_platform.core.registry.agent_registry import AgentRegistry
+from agent_platform.skills.bundle import with_skill_bundle
+
+AGENT_ID = "my-agent"
+
+
+def _runner(*, envelope, principal, session, run_ctx, settings, runtime):
+    ...
+
+
+def _build_definition() -> AgentDefinition:
+    defn = AgentDefinition(
+        id=AGENT_ID,
+        display_name="My Agent",
+        description="...",
+        request_model=MyRequest,
+        response_model=MyResponse,
+        capabilities=[AgentCapability.REPORT, AgentCapability.TOOL_USING],
+        runner=_runner,
+        mcp_tool_names=["web_search"],  # ⊆ tools_server 全局池
+        cli_help="...",
+        http_path_prefix="/v1/my-agent",
+        cli_subparser_factory=_cli_subparser,
+        cli_run_handler=_cli_run,
+        http_router_factories=[lambda: [my_router]],
+    )
+    return with_skill_bundle(
+        defn,
+        bundle_key="my-agent",       # 与 entry_point 名一致
+        bundle_root=bundle_root(),
+    )
+
+
+def register(registry: AgentRegistry) -> None:
+    registry.register(_build_definition())
+```
+
+构建 prompt 时用 `load_skill_overlay_for_mode(mode)`（要求当前线程已 `agent_execution`）；**不要**手写 `skills=[...]`。
+
+### 3.3 注册与校验
+
+- `create_runtime()` 会注入 `validate_agent_dependencies`：`register()` 前检查 MCP/skill 声明 ⊆ 全局池，且与 bundle 解析结果一致。
+- 运行期：`AgentScope` = 平台已启用工具 ∩ `mcp_tool_names`；skill overlay = 本 Agent 的 `skill_mode_map`（见 [ARCHITECTURE.md §6.2](ARCHITECTURE.md)）。
 
 注册后验证：
 
@@ -91,12 +198,46 @@ uv run agent-platform my-agent --help
 
 ---
 
-## 四、Skills / Prompts（stock-recap 模式）
+## 四、Skills / MCP / Prompts
 
-- Skill 放在 **`agents/stock_recap/skills/<name>/SKILL.md`**，由 entry_point `agent_platform.skills` 或包内 manifest 发现。
-- System prompt 放在 **`agents/stock_recap/prompts/`** 或 `resources/prompts/`，entry_point `agent_platform.prompts`。
+### 4.1 MCP 工具
 
-对话类 Agent（如 `hsk30-tutor`）可在包内 `prompts.py` 直接拼装 system 文本，不必走 Skill manifest。
+1. 在 `tools_server/tools/` 增加 `SPEC`，由 `tools_server/registry.py` 聚合（**全局池**）。
+2. 在 `AgentDefinition` 声明 `mcp_tool_names=[...]`（该 Agent 允许的工具子集）。
+3. 运行期：`AgentScope` 将暴露给 LLM 的工具裁成 **平台已启用 ∩ mcp_tool_names**（`create_runtime` → `agent_execution` / `generate_once` / `AgentRuntime.run` 内激活）。
+
+无 skill、无工具的 Agent（如 `hsk30-tutor`）保持 `mcp_tool_names=[]` 即可。
+
+### 4.2 Skills（bundle）
+
+| 写什么 | 位置 |
+|--------|------|
+| **Skill id（唯一真源）** | 各 `SKILL.md` frontmatter 的 `name:` |
+| **文件路径** | `agents/<id>/skills/manifest.json` → `skills[].path` |
+| **mode → skill** | 同 manifest 的 `mode_to_skill_id`（值必须等于某条 `SKILL.md` 的 `name`） |
+| **禁止** | 在 manifest 里写 `id` 字段（加载时报错） |
+
+注册时：
+
+```python
+from agent_platform.skills.bundle import with_skill_bundle
+
+reg.register(
+    with_skill_bundle(
+        AgentDefinition(..., mcp_tool_names=[...]),
+        bundle_key="my-agent",  # 与 pyproject entry_point 名一致
+    )
+)
+```
+
+运行期 overlay 走 `load_skill_overlay_for_mode`，且**必须**已激活 `AgentScope`；只用本 Agent 的 `skill_mode_map`，不用全局合并的 mode 表。
+
+`RECAP_SKILL_EXTRA_DIRS` 仅向**全局 skill 目录**追加 id；要改变某 Agent 的 mode 映射请改其 bundle 或 `RECAP_SKILL_ID`（须在 `skills` 白名单内）。
+
+### 4.3 Prompts
+
+- 业务 system 底座：`agents/<id>/prompts/` 或 `resources/prompts/`（entry_point `agent_platform.prompts`）。
+- 对话类 Agent 也可在 `prompts.py` 直接拼装，不必走 Skill bundle。
 
 ---
 
