@@ -1,5 +1,4 @@
-"""HTTP API。"""
+"""shim → agent_platform.adapters.http"""
+from agent_platform.adapters.http.app import create_app
 
-from agent_platform.interfaces.api.routes import app
-
-__all__ = ["app"]
+__all__ = ["create_app"]

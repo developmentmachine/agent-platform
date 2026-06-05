@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional, Set
 from agent_platform.config.settings import Settings
 from agent_platform.core.ports.mcp_tool import McpClientPort, McpToolDescriptor
 from agent_platform.core.runtime.contextvars import current_budget, current_run_context
-from agent_platform.policy.tools import (
+from agent_platform.infra.policy.tools import (
     ToolBudgetExceeded,
     ToolDisabled,
     ToolForbidden,
@@ -538,13 +538,13 @@ class McpToolGateway:
         error: Optional[str],
         tenant_id: Optional[str] = None,
     ) -> None:
-        from agent_platform.observability.metrics import record_tool_invocation
+        from agent_platform.runtime.observability.metrics import record_tool_invocation
 
         record_tool_invocation(tool_name, status)
         if not self._settings.tool_audit_enabled:
             return
         try:
-            from agent_platform.infrastructure.persistence.db import insert_tool_invocation
+            from agent_platform.infra.persistence.db import insert_tool_invocation
 
             insert_tool_invocation(
                 self._settings.db_path,

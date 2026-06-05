@@ -6,7 +6,7 @@ import pytest
 from agent_platform.config.settings import Settings
 from agent_platform.core.ports.mcp_tool import McpClientPort, McpToolDescriptor, McpToolResult
 from agent_platform.infra.mcp_client.inproc import InProcessMcpClient
-from agent_platform.policy.tools import ToolDisabled, ToolPolicy, ToolPolicyRegistry
+from agent_platform.infra.policy.tools import ToolDisabled, ToolPolicy, ToolPolicyRegistry
 from agent_platform.runtime.mcp_gateway import McpToolGateway
 from agent_platform.tools_server.registry import (
     ToolRegistry,
@@ -201,7 +201,7 @@ def test_gateway_execute_ok_calls_client(monkeypatch, tmp_path) -> None:
 def test_runner_is_backed_by_mcp_gateway(monkeypatch, tmp_path) -> None:
     """W2: ``RecapToolRunner.openai_compatible_schemas`` 必须由 gateway 推导，
     而不是历史的 ``TOOL_SCHEMAS`` 硬编码常量。"""
-    from agent_platform.infrastructure.tools.runner import RecapToolRunner
+    from agent_platform.infra.tools.runner import RecapToolRunner
 
     s = _settings(monkeypatch, tmp_path)
     runner = RecapToolRunner(s)

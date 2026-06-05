@@ -38,7 +38,7 @@ def _settings(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Settings:
         "RECAP_WECOM_USE_SIDECAR": "false",
     }.items():
         monkeypatch.setenv(k, v)
-    from agent_platform.infrastructure.persistence.db import init_db
+    from agent_platform.infra.persistence.db import init_db
 
     s = Settings()
     init_db(s.db_path)

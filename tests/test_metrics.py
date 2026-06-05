@@ -26,18 +26,18 @@ from agent_platform.domain.models import (
     RecapDaily,
     RecapDailySection,
 )
-from agent_platform.infrastructure.llm.backends import call_llm
-from agent_platform.infrastructure.llm.providers import register_provider
-from agent_platform.infrastructure.persistence.db import init_db
-from agent_platform.infrastructure.tools.runner import RecapToolRunner
-from agent_platform.observability.metrics import (
+from agent_platform.infra.llm.backends import call_llm
+from agent_platform.infra.llm.providers import register_provider
+from agent_platform.infra.persistence.db import init_db
+from agent_platform.infra.tools.runner import RecapToolRunner
+from agent_platform.runtime.observability.metrics import (
     get_metrics,
     record_outbox_action,
     record_phase_duration,
     record_recap_run,
     reset_default_metrics,
 )
-from agent_platform.policy.tools import (
+from agent_platform.infra.policy.tools import (
     ToolDisabled,
     ToolPolicy,
     ToolPolicyRegistry,
@@ -134,11 +134,11 @@ def _patched_backend(monkeypatch):
         return "metrics_fake"
 
     monkeypatch.setattr(
-        "agent_platform.infrastructure.llm.backends.resolve_provider",
+        "agent_platform.infra.llm.backends.resolve_provider",
         _fake_resolve_provider,
     )
     monkeypatch.setattr(
-        "agent_platform.infrastructure.llm.backends.llm_backend_effective",
+        "agent_platform.infra.llm.backends.llm_backend_effective",
         _fake_backend_effective,
     )
     return holder

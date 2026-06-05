@@ -3,7 +3,7 @@ import pytest
 
 from agent_platform.agents.stock_recap.memory import manager as mgr
 from agent_platform.agents.stock_recap.llm.prompts import PROMPT_BASE_VERSION
-from agent_platform.infrastructure.persistence.db import (
+from agent_platform.infra.persistence.db import (
     get_active_prompt_version,
     init_db,
     set_active_prompt_version,

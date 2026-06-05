@@ -22,10 +22,10 @@ from agent_platform.config.settings import Settings
 from agent_platform.domain.models import GenerateRequest
 from agent_platform.agents.stock_recap.data.collector import collect_snapshot
 from agent_platform.agents.stock_recap.data.features import build_features
-from agent_platform.infrastructure.llm.backends import llm_backend_effective, model_effective
+from agent_platform.infra.llm.backends import llm_backend_effective, model_effective
 from agent_platform.agents.stock_recap.llm.prompts import build_messages
-from agent_platform.infrastructure.persistence.db import load_feedback_summary, load_history
-from agent_platform.infrastructure.push.wechat import test_push
+from agent_platform.infra.persistence.db import load_feedback_summary, load_history
+from agent_platform.infra.push.wechat import test_push
 from agent_platform.interfaces.scheduler.jobs import start_scheduler
 
 

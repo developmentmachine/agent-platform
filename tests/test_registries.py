@@ -23,7 +23,7 @@ from agent_platform.domain.registries import (
     reset_default_mode_registry,
 )
 from agent_platform.agents.stock_recap.llm.parse import parse_and_validate
-from agent_platform.infrastructure.llm.resolve import _model_prefix_to_backend
+from agent_platform.infra.llm.resolve import _model_prefix_to_backend
 
 
 # ─── ModeRegistry ───────────────────────────────────────────────────────────

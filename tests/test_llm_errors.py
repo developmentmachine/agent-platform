@@ -23,8 +23,8 @@ from agent_platform.domain.models import (
     LlmTransportError,
     Recap,
 )
-from agent_platform.infrastructure.llm import backends as backends_mod
-from agent_platform.infrastructure.llm.backends import call_llm
+from agent_platform.infra.llm import backends as backends_mod
+from agent_platform.infra.llm.backends import call_llm
 from agent_platform.agents.stock_recap.llm.parse import parse_and_validate
 
 

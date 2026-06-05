@@ -29,20 +29,20 @@ from agent_platform.domain.models import (
 )
 from agent_platform.agents.stock_recap.data.collector import collect_snapshot
 from agent_platform.agents.stock_recap.data.features import build_features
-from agent_platform.infrastructure.llm.backends import call_llm, model_effective
+from agent_platform.infra.llm.backends import call_llm, model_effective
 from agent_platform.agents.stock_recap.llm.eval import auto_eval
 from agent_platform.agents.stock_recap.llm.prompts import build_messages
-from agent_platform.infrastructure.persistence.db import (
+from agent_platform.infra.persistence.db import (
     insert_recap_audit,
     insert_run,
     load_feedback_summary,
 )
-from agent_platform.observability.metrics import (
+from agent_platform.runtime.observability.metrics import (
     record_phase_duration,
     record_recap_run,
 )
-from agent_platform.observability.tracing import get_tracer
-from agent_platform.policy.guardrails import clamp_llm_messages, coerce_recap_output
+from agent_platform.runtime.observability.tracing import get_tracer
+from agent_platform.infra.policy.guardrails import clamp_llm_messages, coerce_recap_output
 from agent_platform.agents.stock_recap.render import render_markdown, render_wechat_text
 
 from agent_platform.application.side_effects import (

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os
 
-from agent_platform.infrastructure.tools.handlers.history import run_query_history
+from agent_platform.infra.tools.handlers.history import run_query_history
 from agent_platform.tools_server.registry import ToolSpec
 
 

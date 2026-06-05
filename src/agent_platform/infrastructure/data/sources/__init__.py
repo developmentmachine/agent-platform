@@ -1,2 +1,2 @@
-"""shim → ``agent_platform.agents.stock_recap.data.sources`` (W3)"""
-from agent_platform.agents.stock_recap.data.sources import *  # noqa: F401,F403
+"""shim → agent_platform.infra.data.sources"""
+from agent_platform.infra.data.sources import *  # noqa: F401,F403

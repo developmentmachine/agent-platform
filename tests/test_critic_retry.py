@@ -25,7 +25,7 @@ from agent_platform.domain.models import (
     RecapDailySection,
 )
 from agent_platform.domain.run_context import RunContext
-from agent_platform.infrastructure.llm import backends as backends_mod
+from agent_platform.infra.llm import backends as backends_mod
 
 
 def _settings(monkeypatch: pytest.MonkeyPatch, *, critic_max_retries: int = 1) -> Settings:
@@ -138,7 +138,7 @@ def test_critic_retry_does_not_repeat_for_transport_error(monkeypatch: pytest.Mo
     )
     monkeypatch.setattr(backends_mod, "resolve_provider", lambda _name: provider)
     # 关掉 tenacity sleep 以加速
-    from agent_platform.infrastructure.llm.backends import call_llm
+    from agent_platform.infra.llm.backends import call_llm
     call_llm.retry.sleep = lambda _s: None  # type: ignore[attr-defined]
 
     pipeline_mod._phase_act(state, _NoopTracer())

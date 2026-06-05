@@ -10,14 +10,14 @@ from agent_platform.domain.registries import (
     default_backend_registry,
     reset_default_backend_registry,
 )
-from agent_platform.infrastructure.llm.backends import call_llm
-from agent_platform.infrastructure.llm.providers import (
+from agent_platform.infra.llm.backends import call_llm
+from agent_platform.infra.llm.providers import (
     available_backends,
     default_provider_registry,
     register_provider,
     resolve_provider,
 )
-from agent_platform.infrastructure.llm.providers.base import LlmProvider
+from agent_platform.infra.llm.providers.base import LlmProvider
 
 
 def _make_stub_recap() -> RecapDaily:
@@ -87,7 +87,7 @@ def test_register_custom_provider_routes_through_call_llm(monkeypatch):
     fake = _FakeProvider()
     register_provider("fake", fake)
     try:
-        import agent_platform.infrastructure.llm.backends as be
+        import agent_platform.infra.llm.backends as be
 
         monkeypatch.setattr(be, "llm_backend_effective", lambda *a, **kw: "fake")
         monkeypatch.setattr(be, "model_effective", lambda s, spec: "test-model")
@@ -101,6 +101,6 @@ def test_register_custom_provider_routes_through_call_llm(monkeypatch):
     finally:
         # 重置两侧默认注册表 → 下次取用都会重建为内置。
         reset_default_backend_registry()
-        from agent_platform.infrastructure.llm import providers as providers_mod
+        from agent_platform.infra.llm import providers as providers_mod
 
         providers_mod._DEFAULT_REGISTRY = None

@@ -9,17 +9,17 @@ import pytest
 from agent_platform.application.orchestration.budget import AgentBudget
 from agent_platform.config.settings import Settings
 from agent_platform.domain.models import LlmBudgetExceeded
-from agent_platform.infrastructure.persistence.db import (
+from agent_platform.infra.persistence.db import (
     init_db,
     load_recent_tool_invocations,
 )
 from agent_platform.core.ports.mcp_tool import McpToolResult
-from agent_platform.infrastructure.tools.runner import RecapToolRunner
-from agent_platform.observability.runtime_context import (
+from agent_platform.infra.tools.runner import RecapToolRunner
+from agent_platform.runtime.observability.runtime_context import (
     current_budget,
     current_run_context,
 )
-from agent_platform.policy.tools import (
+from agent_platform.infra.policy.tools import (
     ToolBudgetExceeded,
     ToolDisabled,
     ToolForbidden,

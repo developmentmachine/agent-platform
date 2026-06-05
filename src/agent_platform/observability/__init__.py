@@ -1,1 +1,2 @@
-"""可观测性：OpenTelemetry 追踪与运行上下文。"""
+"""shim → agent_platform.runtime.observability"""
+from agent_platform.runtime.observability import *  # noqa: F401,F403

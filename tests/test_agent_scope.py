@@ -8,8 +8,8 @@ from agent_platform.config.settings import Settings
 from agent_platform.core.registry import AgentRegistry
 from agent_platform.core.runtime.agent_scope import AgentScope, current_agent_scope, resolve_skill_id_for_agent
 from agent_platform.infra.mcp_client.inproc import InProcessMcpClient
-from agent_platform.infrastructure.tools.runner import RecapToolRunner
-from agent_platform.policy.tools import ToolForbidden
+from agent_platform.infra.tools.runner import RecapToolRunner
+from agent_platform.infra.policy.tools import ToolForbidden
 from agent_platform.runtime import create_runtime
 from agent_platform.runtime.mcp_gateway import McpToolGateway
 from agent_platform.runtime.scope import agent_execution

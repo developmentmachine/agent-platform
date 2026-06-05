@@ -10,11 +10,11 @@ from agent_platform.domain.models import (
     RecapDailySection,
     RecapStrategy,
 )
-from agent_platform.policy.guardrails import (
+from agent_platform.infra.policy.guardrails import (
     coerce_recap_output,
     reset_default_ruleset_cache,
 )
-from agent_platform.policy.output_rules import (
+from agent_platform.infra.policy.output_rules import (
     ConsistencyRule,
     ForbiddenPhraseRule,
     RequirePhraseRule,

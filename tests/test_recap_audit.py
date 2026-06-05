@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 
 from agent_platform.config.settings import Settings
 from agent_platform.domain.models import LlmTokens, RecapDaily, RecapDailySection
-from agent_platform.infrastructure.persistence.db import (
+from agent_platform.infra.persistence.db import (
     init_db,
     insert_recap_audit,
     load_recap_audit,

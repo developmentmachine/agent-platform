@@ -1,7 +1,7 @@
 """web_search 工具规格。"""
 from __future__ import annotations
 
-from agent_platform.infrastructure.tools.handlers.web_search import run_web_search
+from agent_platform.infra.tools.handlers.web_search import run_web_search
 from agent_platform.tools_server.registry import ToolSpec
 
 

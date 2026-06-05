@@ -19,7 +19,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import agent_platform.config.settings as settings_module
-import agent_platform.infrastructure.persistence.db as db_module
+import agent_platform.infra.persistence.db as db_module
 from agent_platform.config.settings import Settings
 from agent_platform.domain.models import (
     Features,
@@ -30,7 +30,7 @@ from agent_platform.domain.models import (
 )
 from agent_platform.domain.principal import PrincipalContext, current_principal
 from agent_platform.domain.run_context import RunContext
-from agent_platform.infrastructure.persistence.db import (
+from agent_platform.infra.persistence.db import (
     count_tenants,
     enqueue_pending_action,
     init_db,
