@@ -82,7 +82,7 @@ def test_cli_once_mode(settings_no_llm):
 
 
 def test_http_chat_direct(settings_no_llm):
-    from agent_platform.interfaces.api.app import create_app
+    from agent_platform.adapters.http.app import create_app
 
     client = TestClient(create_app())
     r = client.post(

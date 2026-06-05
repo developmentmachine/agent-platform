@@ -93,15 +93,11 @@ forbidden_modules = [
     "agent_platform.agents",
     "agent_platform.tools_server",
     "agent_platform.application",
-    "agent_platform.infrastructure",
-    "agent_platform.interfaces",
 ]
-# 例外：core.runtime 暂从 ``domain`` re-export RunContext，待物理迁移后取消；
-# core.orchestration.outbox 是 shim，re-export application.side_effects.outbox。
+# 例外：core.runtime 暂从 ``domain`` re-export RunContext，待物理迁移后取消。
 ignore_imports = [
     "agent_platform.core.runtime.contextvars -> agent_platform.runtime.observability.runtime_context",
     "agent_platform.core.runtime.run_context -> agent_platform.domain.run_context",
-    "agent_platform.core.orchestration.outbox -> agent_platform.application.side_effects.outbox",
 ]
 
 [[tool.importlinter.contracts]]
@@ -121,7 +117,6 @@ source_modules = [
 ]
 forbidden_modules = [
     "agent_platform.infra",
-    "agent_platform.infrastructure",
     "agent_platform.agents",
     "agent_platform.application",
 ]

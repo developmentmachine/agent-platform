@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from agent_platform.interfaces.api.deps import require_api_key, require_rate_limit
+from agent_platform.adapters.http.deps import require_api_key, require_rate_limit
 from agent_platform.agents.hsk30_tutor.models import TutorChatRequest, TutorChatResponse
 from agent_platform.agents.hsk30_tutor.use_case import chat_turn
 from agent_platform.config.settings import Settings, get_settings

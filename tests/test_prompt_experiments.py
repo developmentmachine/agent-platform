@@ -299,7 +299,7 @@ def test_pipeline_no_experiment_keeps_global_prompt_version(tmp_path, monkeypatc
 
 
 def _client(settings: Settings) -> TestClient:
-    from agent_platform.interfaces.api.app import create_app
+    from agent_platform.adapters.http.app import create_app
 
     app = create_app()
     return TestClient(app)

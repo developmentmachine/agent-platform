@@ -17,7 +17,7 @@ def _reset_registry():
 
 def test_http_app_auto_includes_recap_routes(monkeypatch: pytest.MonkeyPatch) -> None:
     _reset_registry()
-    from agent_platform.interfaces.api.app import create_app
+    from agent_platform.adapters.http.app import create_app
 
     app = create_app()
     paths = {route.path for route in app.router.routes}
@@ -36,7 +36,7 @@ def test_cli_list_agents_includes_stock_recap(
     monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
     _reset_registry()
-    from agent_platform.interfaces import cli as cli_mod
+    from agent_platform.adapters.cli import main as cli_mod
 
     monkeypatch.setattr("sys.argv", ["agent_platform", "--list-agents"])
     rc = cli_mod.cli_main()
@@ -49,7 +49,7 @@ def test_cli_list_agents_includes_stock_recap(
 def test_cli_subparser_registered_for_each_agent(monkeypatch: pytest.MonkeyPatch) -> None:
     """通过模拟 ``--help`` 触发 subparser 装配。"""
     _reset_registry()
-    from agent_platform.interfaces import cli as cli_mod
+    from agent_platform.adapters.cli import main as cli_mod
 
     monkeypatch.setattr("sys.argv", ["agent_platform", "stock-recap", "--help"])
     with pytest.raises(SystemExit) as ei:
@@ -87,7 +87,7 @@ def test_scheduler_auto_binds_agent_jobs(monkeypatch: pytest.MonkeyPatch, tmp_pa
     )
 
     from agent_platform.config.settings import Settings
-    from agent_platform.interfaces.scheduler.jobs import start_scheduler
+    from agent_platform.adapters.scheduler.jobs import start_scheduler
 
     monkeypatch.setenv("RECAP_DB_PATH", str(tmp_path / "sched.db"))
     monkeypatch.setenv("RECAP_OUTBOX_SWEEP_INTERVAL_SECONDS", "60")

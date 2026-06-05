@@ -163,7 +163,7 @@ def _build_app_with_settings(settings: Settings):
     """每个 case 重新装一遍 app + 注入 settings，避免 Settings 单例污染。"""
     settings_module._settings_instance = settings
     from agent_platform.config.settings import get_settings as _get_settings
-    from agent_platform.interfaces.api.app import create_app
+    from agent_platform.adapters.http.app import create_app
 
     app = create_app()
     app.dependency_overrides[_get_settings] = lambda: settings

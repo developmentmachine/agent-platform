@@ -312,7 +312,7 @@ def test_metrics_prom_endpoint_returns_exposition_format(tmp_path, monkeypatch):
     record_recap_run("daily", "live", "ok")
     record_phase_duration("plan", 42.0)
 
-    from agent_platform.interfaces.api.app import create_app
+    from agent_platform.adapters.http.app import create_app
 
     app = create_app()
     client = TestClient(app)
@@ -335,7 +335,7 @@ def test_metrics_prom_renders_for_unrecorded_metrics(tmp_path, monkeypatch):
     monkeypatch.setenv("RECAP_DB_PATH", str(tmp_path / "ep2.db"))
     monkeypatch.setenv("RECAP_WXWORK_WEBHOOK_URL", "http://example.invalid/hook")
     monkeypatch.setenv("RECAP_PUSH_ENABLED", "false")
-    from agent_platform.interfaces.api.app import create_app
+    from agent_platform.adapters.http.app import create_app
 
     client = TestClient(create_app())
     resp = client.get("/metrics/prom")

@@ -15,7 +15,7 @@ from typing import Dict, List, Tuple
 
 import pytest
 
-from agent_platform.application.orchestration.budget import AgentBudget
+from agent_platform.core.runtime.budget import AgentBudget
 from agent_platform.agents.stock_recap.recap_state import RecapAgentRunState
 from agent_platform.agents.stock_recap.legacy_pipeline import _check_budget_between_phases
 from agent_platform.config.settings import Settings

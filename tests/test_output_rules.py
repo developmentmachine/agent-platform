@@ -200,7 +200,7 @@ forbidden_phrases:
 
 def test_coerce_falls_back_on_apply_error(monkeypatch: pytest.MonkeyPatch) -> None:
     """apply_rules 抛异常时 coerce 仍要能产出 disclaimer 兜底。"""
-    from agent_platform.policy import guardrails as gr
+    from agent_platform.infra.policy import guardrails as gr
 
     def boom(*_args, **_kwargs):
         raise RuntimeError("simulated rule crash")
