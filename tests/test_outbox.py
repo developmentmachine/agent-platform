@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 
 import pytest
 
-from agent_platform.core.orchestration import outbox
+from agent_platform.application.side_effects import outbox
 from agent_platform.infra.persistence.db import init_db
 
 

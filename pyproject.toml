@@ -1,5 +1,5 @@
 [project]
-name = "stock-recap"
+name = "agent-platform"
 version = "1.0.0"
 description = "Agent Platform：多智能体运行平台（CLI/HTTP/调度/IM）。内置 stock-recap（A 股日终复盘/次日策略）与 hsk30-tutor（HSK 3.0 中文陪练）。"
 requires-python = ">=3.10"
@@ -33,7 +33,7 @@ build-backend = "hatchling.build"
 packages = ["src/agent_platform"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"src/agent_platform/policy/rules.yaml" = "agent_platform/policy/rules.yaml"
+"src/agent_platform/infra/policy/rules.yaml" = "agent_platform/infra/policy/rules.yaml"
 
 # 下游包可扩展 Skills：在 wheel 的 pyproject 中声明
 #   [project.entry-points."agent_platform.skills"]
@@ -43,8 +43,8 @@ packages = ["src/agent_platform"]
 #   [project.entry-points."agent_platform.agents"]
 #   my_agent = "my_pkg.manifest:register"   # register(AgentRegistry) -> None
 [project.scripts]
-agent_platform = "agent_platform.interfaces.cli:cli_main"
-agent-platform = "agent_platform.interfaces.cli:cli_main"
+agent_platform = "agent_platform.adapters.cli.main:cli_main"
+agent-platform = "agent_platform.adapters.cli.main:cli_main"
 stock-recap-mcp = "agent_platform.interfaces.mcp_stdio:main"
 agent-platform-tools-mcp = "agent_platform.tools_server:run_server"
 agent-platform-qq-bot = "agent_platform.adapters.qq.__main__:main"
@@ -95,14 +95,13 @@ forbidden_modules = [
     "agent_platform.application",
     "agent_platform.infrastructure",
     "agent_platform.interfaces",
-    "agent_platform.presentation",
 ]
-# 例外：core.runtime / core.orchestration 暂从 ``observability`` 与
-# ``application.orchestration.budget`` re-export，待物理迁移后取消此例外。
+# 例外：core.runtime 暂从 ``domain`` re-export RunContext，待物理迁移后取消；
+# core.orchestration.outbox 是 shim，re-export application.side_effects.outbox。
 ignore_imports = [
-    "agent_platform.core.runtime.contextvars -> agent_platform.observability.runtime_context",
-    "agent_platform.core.runtime.budget -> agent_platform.application.orchestration.budget",
+    "agent_platform.core.runtime.contextvars -> agent_platform.runtime.observability.runtime_context",
     "agent_platform.core.runtime.run_context -> agent_platform.domain.run_context",
+    "agent_platform.core.orchestration.outbox -> agent_platform.application.side_effects.outbox",
 ]
 
 [[tool.importlinter.contracts]]
@@ -125,6 +124,13 @@ forbidden_modules = [
     "agent_platform.infrastructure",
     "agent_platform.agents",
     "agent_platform.application",
+]
+# 例外：adapters.qq/wecom 通过 runtime.factory 间接触达 infra（预存问题）
+ignore_imports = [
+    "agent_platform.adapters.qq.__main__ -> agent_platform.runtime.factory",
+    "agent_platform.adapters.qq.connector -> agent_platform.runtime",
+    "agent_platform.adapters.wecom.__main__ -> agent_platform.runtime.factory",
+    "agent_platform.adapters.wecom.connector -> agent_platform.runtime",
 ]
 [[tool.importlinter.contracts]]
 name = "tools_server 不得 import 任何 Agent"
