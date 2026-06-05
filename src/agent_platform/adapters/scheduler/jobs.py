@@ -53,16 +53,13 @@ def _run_outbox_sweep(settings: Settings) -> None:
 
 
 def _load_registry():
-    """触发 builtin agent 注册 + entry_points 发现。"""
-    from agent_platform.agents.stock_recap import manifest as stock_recap_manifest
+    """触发 entry_points 发现所有 Agent。"""
     from agent_platform.core.registry.agent_registry import (
         discover_agents,
         get_default_registry,
     )
 
     reg = get_default_registry()
-    if not reg.has(stock_recap_manifest.AGENT_ID):
-        stock_recap_manifest.register(reg)
     discover_agents(reg)
     return reg
 

@@ -26,7 +26,7 @@ from agent_platform.infra.llm.backends import llm_backend_effective, model_effec
 from agent_platform.agents.stock_recap.llm.prompts import build_messages
 from agent_platform.infra.persistence.db import load_feedback_summary, load_history
 from agent_platform.infra.push.wechat import test_push
-from agent_platform.adapters.scheduler.jobs import start_scheduler
+from agent_platform.core.services import start_scheduler
 
 
 def _stable_json(obj: Any) -> str:
@@ -160,7 +160,8 @@ def run(
 
 
 def _cmd_serve(settings: Settings, logger: logging.Logger, args: argparse.Namespace) -> int:
-    from agent_platform.adapters.http.routes import app
+    from agent_platform.core.services import create_app
+    app = create_app()
 
     scheduler = None
     if settings.scheduler_enabled:

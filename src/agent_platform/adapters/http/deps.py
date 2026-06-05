@@ -26,17 +26,8 @@ logger = logging.getLogger("agent_platform.adapters.http.deps")
 
 
 # ─── 时间 / JSON 小工具 ────────────────────────────────────────────────────────
-
-def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
-def today_str() -> str:
-    return datetime.now().strftime("%Y-%m-%d")
-
-
-def stable_json(obj: Any) -> str:
-    return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+# 规范位置：core.utils；此处 re-export 供 adapters 内部兼容。
+from agent_platform.core.utils import stable_json, today_str, utc_now_iso  # noqa: F401
 
 
 # ─── 速率限制（滑动窗口，单进程内存实现） ─────────────────────────────────────────

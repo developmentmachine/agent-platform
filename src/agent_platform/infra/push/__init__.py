@@ -31,8 +31,14 @@ def get_push_provider(settings: object) -> "PushProvider | None":
 
     if s.push_enabled and s.wxwork_webhook_url:
         from agent_platform.infra.push.wechat import WechatWorkProvider
+        from agent_platform.agents.stock_recap.render import (
+            render_markdown_for_wechat_work,
+            render_wechat_text,
+        )
         return WechatWorkProvider(
             webhook_url=s.wxwork_webhook_url,
+            render_markdown=render_markdown_for_wechat_work,
+            render_text=render_wechat_text,
             fallback_text=s.push_fallback_text,
         )
 

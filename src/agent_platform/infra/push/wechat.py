@@ -1,6 +1,6 @@
 """企业微信推送层。
 
-支持：
+支持:
 - 企业微信群机器人 Webhook（Markdown 消息 / Text 消息）
 - 自动降级：Markdown 失败时降级为纯文本
 """
@@ -8,13 +8,12 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import httpx
 
 from agent_platform.domain.models import Recap
 from agent_platform.infra.push import PushProvider
-from agent_platform.agents.stock_recap.render import render_markdown_for_wechat_work, render_wechat_text
 
 logger = logging.getLogger("agent_platform.infra.push.wechat")
 
@@ -23,11 +22,28 @@ def _stable_json(obj: Any) -> str:
     return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
-class WechatWorkProvider(PushProvider):
-    """企业微信群机器人推送 provider。"""
+# 渲染函数类型：Recap -> str
+RenderFn = Callable[[Recap], str]
 
-    def __init__(self, webhook_url: str, fallback_text: bool = True, timeout: int = 10):
+
+class WechatWorkProvider(PushProvider):
+    """企业微信群机器人推送 provider。
+
+    渲染函数通过构造函数注入，解除 infra → agents 依赖。
+    """
+
+    def __init__(
+        self,
+        webhook_url: str,
+        *,
+        render_markdown: RenderFn,
+        render_text: RenderFn,
+        fallback_text: bool = True,
+        timeout: int = 10,
+    ):
         self.webhook_url = webhook_url
+        self._render_markdown = render_markdown
+        self._render_text = render_text
         self.fallback_text = fallback_text
         self.timeout = timeout
 
@@ -35,6 +51,8 @@ class WechatWorkProvider(PushProvider):
         return push_wechat_work(
             self.webhook_url,
             recap,
+            render_markdown=self._render_markdown,
+            render_text=self._render_text,
             fallback_text=self.fallback_text,
             timeout=self.timeout,
         )
@@ -46,6 +64,9 @@ class WechatWorkProvider(PushProvider):
 def push_wechat_work(
     webhook_url: str,
     recap: Recap,
+    *,
+    render_markdown: RenderFn,
+    render_text: RenderFn,
     fallback_text: bool = True,
     timeout: int = 10,
 ) -> bool:
@@ -55,13 +76,15 @@ def push_wechat_work(
     Args:
         webhook_url: 企业微信群机器人 Webhook URL
         recap: 已生成的复盘对象
+        render_markdown: Markdown 渲染函数
+        render_text: 纯文本渲染函数
         fallback_text: 若 Markdown 推送失败，是否降级为纯文本
         timeout: HTTP 超时秒数
 
     Returns:
         True 推送成功，False 推送失败
     """
-    md_content = render_markdown_for_wechat_work(recap)
+    md_content = render_markdown(recap)
 
     # 优先：Markdown 消息
     if _send_wechat_markdown(webhook_url, md_content, timeout=timeout):
@@ -72,7 +95,7 @@ def push_wechat_work(
         return False
 
     # 降级：纯文本消息
-    text_content = render_wechat_text(recap)
+    text_content = render_text(recap)
     if _send_wechat_text(webhook_url, text_content, timeout=timeout):
         logger.info(_stable_json({"event": "push_success", "type": "text_fallback"}))
         return True

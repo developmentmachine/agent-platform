@@ -6,7 +6,7 @@ import json
 import sys
 from typing import Any, List
 
-from agent_platform.adapters.cli.repl import run_repl
+from agent_platform.core.services import run_repl
 from agent_platform.agents.hsk30_tutor.models import ChatTurn, TutorChatRequest
 from agent_platform.agents.hsk30_tutor.use_case import chat_turn
 from agent_platform.config.settings import Settings

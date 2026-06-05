@@ -32,19 +32,13 @@ async def _app_lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 def _load_registry():
-    """触发 builtin agent 注册 + entry_points 发现。
-
-    HTTP 入口可以在 ``app.include_router`` 之前安全调用 — 不会启动事件循环。
-    """
-    from agent_platform.agents.stock_recap import manifest as stock_recap_manifest
+    """触发 entry_points 发现所有 Agent。"""
     from agent_platform.core.registry.agent_registry import (
         discover_agents,
         get_default_registry,
     )
 
     reg = get_default_registry()
-    if not reg.has(stock_recap_manifest.AGENT_ID):
-        stock_recap_manifest.register(reg)
     discover_agents(reg)
     return reg
 
