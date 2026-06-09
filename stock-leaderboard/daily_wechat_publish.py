@@ -13,6 +13,9 @@ import random
 from datetime import datetime
 from pathlib import Path
 
+# MIMO LLM structured output retries can be slow; give 10 min budget
+os.environ.setdefault("RECAP_AGENT_MAX_WALL_MS", "600000")
+
 # ─── 配置 ─────────────────────────────────────────────────────────────────────
 WECHAT_APPID = "wx2fa955fe856dd1c9"
 WECHAT_SECRET = "4ef2765ac8ee7e0ea0ee5f724179c052"
@@ -173,15 +176,31 @@ def main():
 
     # 提取复盘内容（stdout 中 LLM 输出后的纯文本部分）
     recap_text = ""
+    # 策略：先尝试精确匹配，如果内容太短则 fallback 到全文提取
     capture = False
     for line in output.split('\n'):
-        if line.startswith('## 【复盘基准日') or line.startswith('### '):
+        if line.startswith('## 【复盘基准日') or line.startswith('### ') or line.startswith('# '):
             capture = True
         if capture:
-            if line.startswith('{'):  # JSON 日志行，跳过
+            # 跳过 JSON 日志行（以 { 开头且包含 event/ts 字段）
+            if line.startswith('{') and '"event"' in line:
                 continue
             recap_text += line + '\n'
     recap_text = recap_text.strip()
+    
+    # Fallback: 如果提取内容太短（<500字），尝试跳过命令日志行，提取所有文本
+    if len(recap_text) < 500:
+        log("精确提取内容过短，使用 fallback 提取...")
+        recap_text = ""
+        for line in output.split('\n'):
+            line_s = line.strip()
+            # 跳过 JSON 日志行和空行
+            if line_s.startswith('{') and '"event"' in line_s:
+                continue
+            if line_s.startswith('warning:') or line_s.startswith('['):
+                continue
+            recap_text += line + '\n'
+        recap_text = recap_text.strip()
 
     if not recap_text:
         log("未能提取复盘内容，中止")
@@ -209,18 +228,18 @@ def main():
     if leaderboard_img and leaderboard_img.exists():
         # 上传今天的龙虎榜
         media_id, img_url = upload_image(token, str(leaderboard_img))
-        log(f"已上传: {media_id}")
+        log(f"已上传: media_id={media_id}, url={img_url[:80]}...")
     else:
         # 从素材库随机选一张
         img_url = "http://mmbiz.qpic.cn/mmbiz_png/gib5zl5ldEAvtXk6I0uToq8DZlWuJ6MQiaauMPXYic4UvibShrLCibknZkbqe2mIdO7GiceiaMhGK9k5n8OdqnMEhPuUDFJBOke03ootoxdmuaeNEw/0?wx_fmt=png"
+        media_id = ""
 
-    # 随机选封面
-    thumbs = list_leaderboard_images(token)
-    thumb_id = random.choice(thumbs) if thumbs else media_id
+    # 封面：用刚上传的龙虎榜图片
+    thumb_id = media_id
 
     # Step 4: 创建草稿
     log("Step 4: 创建草稿...")
-    title = f"{today} A股日终复盘"
+    title = f"{today} A股行情复盘"
     content = format_recap_html(recap_text, img_url)
     draft_id = create_draft(token, title, thumb_id, content)
     log(f"草稿已创建: {draft_id}")
