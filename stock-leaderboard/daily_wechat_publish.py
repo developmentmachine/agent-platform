@@ -2,6 +2,8 @@
 """
 每日自动流程：stock-recap 复盘 + 龙虎榜 → 微信公众号草稿箱
 每交易日 17:00 由 cron 调用。
+
+凭证从仓库根目录 ``.env`` 读取（``WECHAT_APPID`` / ``WECHAT_SECRET``）。
 """
 import subprocess
 import urllib.request
@@ -12,16 +14,20 @@ import random
 from datetime import datetime
 from pathlib import Path
 
-# ─── 配置 ─────────────────────────────────────────────────────────────────────
+from dotenv import load_dotenv
+
 PROJECT_DIR = Path(__file__).resolve().parent.parent  # agent-platform/
 LEADERBOARD_DIR = Path(__file__).resolve().parent      # stock-leaderboard/
+
+load_dotenv(PROJECT_DIR / ".env")
+
 AUTHOR = os.environ.get("WECHAT_AUTHOR", "Agent Platform")
 
 
 def _require_env(name: str) -> str:
     value = os.environ.get(name, "").strip()
     if not value:
-        print(f"缺少环境变量: {name}", file=sys.stderr)
+        print(f"缺少环境变量: {name}（请在 {PROJECT_DIR / '.env'} 中配置）", file=sys.stderr)
         sys.exit(1)
     return value
 
