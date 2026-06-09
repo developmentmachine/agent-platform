@@ -8,17 +8,22 @@ import urllib.request
 import json
 import os
 import sys
-import glob
 import random
 from datetime import datetime
 from pathlib import Path
 
 # ─── 配置 ─────────────────────────────────────────────────────────────────────
-WECHAT_APPID = "wx2fa955fe856dd1c9"
-WECHAT_SECRET = "4ef2765ac8ee7e0ea0ee5f724179c052"
 PROJECT_DIR = Path(__file__).resolve().parent.parent  # agent-platform/
 LEADERBOARD_DIR = Path(__file__).resolve().parent      # stock-leaderboard/
-AUTHOR = "Agent Platform"
+AUTHOR = os.environ.get("WECHAT_AUTHOR", "Agent Platform")
+
+
+def _require_env(name: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        print(f"缺少环境变量: {name}", file=sys.stderr)
+        sys.exit(1)
+    return value
 
 # ─── 工具函数 ───────────────────────────────────────────────────────────────────
 
@@ -36,7 +41,9 @@ def run_cmd(cmd: list[str], cwd: str = None) -> tuple[bool, str]:
 
 def get_access_token() -> str:
     """获取微信 access_token"""
-    url = f"https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid={WECHAT_APPID}&secret={WECHAT_SECRET}"
+    appid = _require_env("WECHAT_APPID")
+    secret = _require_env("WECHAT_SECRET")
+    url = f"https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid={appid}&secret={secret}"
     with urllib.request.urlopen(url) as r:
         return json.loads(r.read())["access_token"]
 
