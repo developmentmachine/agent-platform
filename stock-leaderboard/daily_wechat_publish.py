@@ -2,6 +2,10 @@
 """
 每日自动流程：stock-recap 复盘 + 龙虎榜 → 微信公众号草稿箱
 每交易日 17:00 由 cron 调用。
+
+特性：
+- 失败自动重试（最多 3 次，间隔递增）
+- 全部失败时通过 webhook 通知用户
 """
 import subprocess
 import urllib.request
@@ -10,11 +14,46 @@ import os
 import sys
 import glob
 import random
+import time
+import traceback
 from datetime import datetime
 from pathlib import Path
 
+# ─── 加载 .env（不依赖 python-dotenv）────────────────────────────────────────
+_SCRIPT_DIR = Path(__file__).resolve().parent  # stock-leaderboard/
+_PROJECT_DIR = _SCRIPT_DIR.parent              # agent-platform/
+
+def _load_env():
+    """从 .env 文件加载环境变量（不覆盖已有的）"""
+    for env_path in [
+        Path("/opt/data/.env"),
+        Path.home() / ".env",
+        _PROJECT_DIR / ".env",
+    ]:
+        if env_path.exists():
+            for line in env_path.read_text().splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, val = line.partition("=")
+                key, val = key.strip(), val.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = val
+            break
+
+_load_env()
+
 # MIMO LLM structured output retries can be slow; give 10 min budget
 os.environ.setdefault("RECAP_AGENT_MAX_WALL_MS", "600000")
+
+# ─── 重试 & 通知配置 ──────────────────────────────────────────────────────────
+MAX_RETRIES = 3
+RETRY_DELAYS = [60, 180, 300]  # 秒：1min, 3min, 5min
+
+# Slack webhook（用于失败通知），从环境变量读取
+SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL", "")
+# 备用：企业微信 webhook
+WECHAT_WEBHOOK_URL = os.environ.get("WECHAT_WEBHOOK_URL", "")
 
 # ─── 配置 ─────────────────────────────────────────────────────────────────────
 WECHAT_APPID = "wx2fa955fe856dd1c9"
@@ -31,10 +70,13 @@ def log(msg: str):
 def run_cmd(cmd: list[str], cwd: str = None) -> tuple[bool, str]:
     """执行命令，返回 (成功, 输出)"""
     log(f"执行: {' '.join(cmd[:6])}...")
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, timeout=600)
+    result = subprocess.run(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+        cwd=cwd, timeout=1800, stdin=subprocess.DEVNULL,  # 30min, no TTY
+    )
     if result.returncode != 0:
-        log(f"失败: {result.stderr[:500]}")
-        return False, result.stderr
+        log(f"失败 (rc={result.returncode}): {result.stdout[:500]}")
+        return False, result.stdout
     return True, result.stdout
 
 def get_access_token() -> str:
@@ -73,7 +115,7 @@ def upload_image(token: str, image_path: str) -> tuple[str, str]:
     return result["media_id"], result.get("url", "")
 
 def list_leaderboard_images(token: str) -> list[str]:
-    """从素材库获取 leaderboard 开头的图片 media_id"""
+    """从素材库获取 leaderboard-title 开头的图片 media_id（用作封面）"""
     data = json.dumps({"type": "image", "offset": 0, "count": 50}).encode()
     req = urllib.request.Request(
         f"https://api.weixin.qq.com/cgi-bin/material/batchget_material?access_token={token}",
@@ -84,7 +126,7 @@ def list_leaderboard_images(token: str) -> list[str]:
 
     ids = []
     for item in result.get("item", []):
-        if item.get("name", "").startswith("leaderboard"):
+        if item.get("name", "").startswith("leaderboard-title"):
             ids.append(item["media_id"])
     return ids
 
@@ -156,6 +198,54 @@ def format_recap_html(recap_text: str, leaderboard_url: str) -> str:
 
     return html
 
+# ─── 失败通知 ───────────────────────────────────────────────────────────────────
+
+def send_failure_notification(error_msg: str, attempt: int):
+    """全部重试失败后，发送通知给用户"""
+    today = datetime.now().strftime("%Y-%m-%d")
+    text = (
+        f"🚨 *微信公众号发布失败*\n"
+        f"日期: {today}\n"
+        f"重试次数: {attempt}/{MAX_RETRIES}\n"
+        f"错误: {error_msg[:500]}\n"
+        f"请手动检查或重跑。"
+    )
+
+    # 方式1: Slack webhook
+    if SLACK_WEBHOOK_URL:
+        try:
+            data = json.dumps({"text": text}).encode()
+            req = urllib.request.Request(
+                SLACK_WEBHOOK_URL,
+                data=data,
+                headers={"Content-Type": "application/json"}
+            )
+            urllib.request.urlopen(req, timeout=10)
+            log("✅ 失败通知已发送到 Slack")
+        except Exception as e:
+            log(f"⚠️ Slack 通知发送失败: {e}")
+
+    # 方式2: 企业微信 webhook
+    if WECHAT_WEBHOOK_URL:
+        try:
+            data = json.dumps({"msgtype": "text", "text": {"content": text}}).encode()
+            req = urllib.request.Request(
+                WECHAT_WEBHOOK_URL,
+                data=data,
+                headers={"Content-Type": "application/json"}
+            )
+            urllib.request.urlopen(req, timeout=10)
+            log("✅ 失败通知已发送到企业微信")
+        except Exception as e:
+            log(f"⚠️ 企业微信通知发送失败: {e}")
+
+    # 方式3: 无 webhook 时，打印到 stdout（cron 会自动投递）
+    if not SLACK_WEBHOOK_URL and not WECHAT_WEBHOOK_URL:
+        log("⚠️ 未配置 webhook，失败信息仅输出到日志")
+        print(f"\n{'='*60}")
+        print(text)
+        print(f"{'='*60}\n")
+
 # ─── 主流程 ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -163,13 +253,46 @@ def main():
     log(f"开始 {today} 日终流程")
 
     # Step 1: 运行 stock-recap
+    # 降级策略：uv run → .venv/bin/python → 自动创建 venv
     log("Step 1: 生成复盘...")
-    ok, output = run_cmd(
-        ["uv", "run", "agent-platform", "stock-recap",
-         "--mode", "daily", "--provider", "live",
-         "--no-write-files", "--skip-trading-check"],
-        cwd=str(PROJECT_DIR)
-    )
+    venv_python = str(PROJECT_DIR / ".venv" / "bin" / "python")
+    venv_exists = Path(venv_python).exists()
+
+    # 尝试 uv run
+    uv_ok, _ = run_cmd(["uv", "run", "--help"], cwd=str(PROJECT_DIR))
+    if uv_ok:
+        stock_recap_cmd = ["uv", "run", "agent-platform", "stock-recap",
+                           "--mode", "daily", "--provider", "live",
+                           "--no-write-files", "--skip-trading-check"]
+    elif venv_exists:
+        stock_recap_cmd = [venv_python, "-m", "agent_platform", "stock-recap",
+                           "--mode", "daily", "--provider", "live",
+                           "--no-write-files", "--skip-trading-check"]
+        log(f"uv 不可用，降级到: {venv_python}")
+    else:
+        # 两者都没有，尝试自动创建 venv
+        log("uv 和 .venv 都不存在，尝试自动创建环境...")
+        run_cmd(["uv", "venv", ".venv"], cwd=str(PROJECT_DIR))
+        run_cmd([venv_python, "-m", "pip", "install", "-e", "."], cwd=str(PROJECT_DIR))
+        if not Path(venv_python).exists():
+            log("❌ 无法创建 .venv 环境，请手动安装 uv 或创建 venv")
+            sys.exit(1)
+        stock_recap_cmd = [venv_python, "-m", "agent_platform", "stock-recap",
+                           "--mode", "daily", "--provider", "live",
+                           "--no-write-files", "--skip-trading-check"]
+        log(f"已自动创建环境: {venv_python}")
+
+    ok, output = run_cmd(stock_recap_cmd, cwd=str(PROJECT_DIR))
+    if not ok and stock_recap_cmd[0] == "uv":
+        # uv run 失败（tcsetattr 等），降级到 .venv
+        if not venv_exists:
+            log("uv run 失败且 .venv 不存在，无法降级")
+            sys.exit(1)
+        log(f"uv run 失败，降级到: {venv_python}")
+        stock_recap_cmd = [venv_python, "-m", "agent_platform", "stock-recap",
+                           "--mode", "daily", "--provider", "live",
+                           "--no-write-files", "--skip-trading-check"]
+        ok, output = run_cmd(stock_recap_cmd, cwd=str(PROJECT_DIR))
     if not ok:
         log("复盘生成失败，中止")
         sys.exit(1)
@@ -207,11 +330,11 @@ def main():
         sys.exit(1)
     log(f"复盘内容: {len(recap_text)} 字")
 
-    # Step 2: 生成龙虎榜
+    # Step 2: 生成龙虎榜（复用 Step 1 的 venv_python）
     log("Step 2: 生成龙虎榜...")
     leaderboard_img = LEADERBOARD_DIR / f"leaderboard_{today}.png"
     ok, _ = run_cmd(
-        ["uv", "run", "leaderboard_summary.py",
+        [venv_python, "leaderboard_summary.py",
          "-d", today, "--image-only",
          "--footer-image", "assets/qrcode-wechat.jpg",
          "--footer-image", "assets/qrcode-mini.jpg"],
@@ -234,8 +357,14 @@ def main():
         img_url = "http://mmbiz.qpic.cn/mmbiz_png/gib5zl5ldEAvtXk6I0uToq8DZlWuJ6MQiaauMPXYic4UvibShrLCibknZkbqe2mIdO7GiceiaMhGK9k5n8OdqnMEhPuUDFJBOke03ootoxdmuaeNEw/0?wx_fmt=png"
         media_id = ""
 
-    # 封面：用刚上传的龙虎榜图片
-    thumb_id = media_id
+    # 封面：从素材库随机选一张 leaderboard-title 图片
+    title_imgs = list_leaderboard_images(token)
+    if title_imgs:
+        thumb_id = random.choice(title_imgs)
+        log(f"封面: 随机选取 leaderboard-title 图片 ({len(title_imgs)} 张可选)")
+    else:
+        thumb_id = media_id
+        log("封面: 未找到 leaderboard-title 图片，使用龙虎榜图片")
 
     # Step 4: 创建草稿
     log("Step 4: 创建草稿...")
@@ -246,4 +375,28 @@ def main():
     log("请登录微信公众号后台 → 草稿箱 → 发表")
 
 if __name__ == "__main__":
-    main()
+    last_error = ""
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            log(f"=== 第 {attempt}/{MAX_RETRIES} 次尝试 ===")
+            main()
+            log("✅ 流程完成，退出")
+            sys.exit(0)
+        except SystemExit as e:
+            if e.code == 0:
+                sys.exit(0)
+            last_error = f"脚本退出码: {e.code}"
+            log(f"❌ 第 {attempt} 次失败: {last_error}")
+        except Exception as e:
+            last_error = f"{type(e).__name__}: {e}"
+            log(f"❌ 第 {attempt} 次异常: {last_error}")
+            log(traceback.format_exc())
+
+        if attempt < MAX_RETRIES:
+            delay = RETRY_DELAYS[attempt - 1]
+            log(f"⏳ {delay} 秒后重试...")
+            time.sleep(delay)
+
+    # 全部重试失败
+    send_failure_notification(last_error, MAX_RETRIES)
+    sys.exit(1)
