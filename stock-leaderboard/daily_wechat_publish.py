@@ -3,6 +3,7 @@
 每日自动流程：stock-recap 复盘 + 龙虎榜 → 微信公众号草稿箱
 每交易日 17:00 由 cron 调用。
 
+凭证从仓库根目录 ``.env`` 读取（``WECHAT_APPID`` / ``WECHAT_SECRET``）。
 特性：
 - 失败自动重试（最多 3 次，间隔递增）
 - 全部失败时通过 webhook 通知用户
@@ -12,36 +13,18 @@ import urllib.request
 import json
 import os
 import sys
-import glob
 import random
 import time
 import traceback
 from datetime import datetime
 from pathlib import Path
 
-# ─── 加载 .env（不依赖 python-dotenv）────────────────────────────────────────
-_SCRIPT_DIR = Path(__file__).resolve().parent  # stock-leaderboard/
-_PROJECT_DIR = _SCRIPT_DIR.parent              # agent-platform/
+from dotenv import load_dotenv
 
-def _load_env():
-    """从 .env 文件加载环境变量（不覆盖已有的）"""
-    for env_path in [
-        Path("/opt/data/.env"),
-        Path.home() / ".env",
-        _PROJECT_DIR / ".env",
-    ]:
-        if env_path.exists():
-            for line in env_path.read_text().splitlines():
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                key, _, val = line.partition("=")
-                key, val = key.strip(), val.strip().strip('"').strip("'")
-                if key and key not in os.environ:
-                    os.environ[key] = val
-            break
+PROJECT_DIR = Path(__file__).resolve().parent.parent  # agent-platform/
+LEADERBOARD_DIR = Path(__file__).resolve().parent      # stock-leaderboard/
 
-_load_env()
+load_dotenv(PROJECT_DIR / ".env")
 
 # MIMO LLM structured output retries can be slow; give 10 min budget
 os.environ.setdefault("RECAP_AGENT_MAX_WALL_MS", "600000")
@@ -55,12 +38,15 @@ SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL", "")
 # 备用：企业微信 webhook
 WECHAT_WEBHOOK_URL = os.environ.get("WECHAT_WEBHOOK_URL", "")
 
-# ─── 配置 ─────────────────────────────────────────────────────────────────────
-WECHAT_APPID = "wx2fa955fe856dd1c9"
-WECHAT_SECRET = "4ef2765ac8ee7e0ea0ee5f724179c052"
-PROJECT_DIR = Path(__file__).resolve().parent.parent  # agent-platform/
-LEADERBOARD_DIR = Path(__file__).resolve().parent      # stock-leaderboard/
-AUTHOR = "Agent Platform"
+AUTHOR = os.environ.get("WECHAT_AUTHOR", "Agent Platform")
+
+
+def _require_env(name: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        print(f"缺少环境变量: {name}（请在 {PROJECT_DIR / '.env'} 中配置）", file=sys.stderr)
+        sys.exit(1)
+    return value
 
 # ─── 工具函数 ───────────────────────────────────────────────────────────────────
 
@@ -81,7 +67,9 @@ def run_cmd(cmd: list[str], cwd: str = None) -> tuple[bool, str]:
 
 def get_access_token() -> str:
     """获取微信 access_token"""
-    url = f"https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid={WECHAT_APPID}&secret={WECHAT_SECRET}"
+    appid = _require_env("WECHAT_APPID")
+    secret = _require_env("WECHAT_SECRET")
+    url = f"https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid={appid}&secret={secret}"
     with urllib.request.urlopen(url) as r:
         return json.loads(r.read())["access_token"]
 
