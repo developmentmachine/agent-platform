@@ -3,19 +3,23 @@
 每日自动流程：stock-recap 复盘 + 龙虎榜 → 微信公众号草稿箱
 每交易日 17:00 由 cron 调用。
 
-凭证从仓库根目录 ``.env`` 读取（``WECHAT_APPID`` / ``WECHAT_SECRET``）。
+微信公众号凭证（``WECHAT_APPID`` / ``WECHAT_SECRET``）：优先读进程环境变量，
+未设置时再从仓库根目录 ``.env`` 补全；两者皆无则报错退出。
 特性：
+- Python 运行时降级：uv run → 项目 .venv → uv 初始化 .venv
 - 失败自动重试（最多 3 次，间隔递增）
 - 全部失败时通过 webhook 通知用户
 """
-import subprocess
-import urllib.request
 import json
 import os
-import sys
 import random
+import shutil
+import subprocess
+import sys
 import time
 import traceback
+import urllib.request
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -23,8 +27,16 @@ from dotenv import load_dotenv
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent  # agent-platform/
 LEADERBOARD_DIR = Path(__file__).resolve().parent      # stock-leaderboard/
+DOTENV_PATH = PROJECT_DIR / ".env"
 
-load_dotenv(PROJECT_DIR / ".env")
+
+def _load_dotenv_fallback() -> None:
+    """环境变量优先；仅对未设置的键从 .env 补全（不覆盖已有环境变量）。"""
+    if DOTENV_PATH.is_file():
+        load_dotenv(DOTENV_PATH, override=False)
+
+
+_load_dotenv_fallback()
 
 # MIMO LLM structured output retries can be slow; give 10 min budget
 os.environ.setdefault("RECAP_AGENT_MAX_WALL_MS", "600000")
@@ -44,7 +56,12 @@ AUTHOR = os.environ.get("WECHAT_AUTHOR", "Agent Platform")
 def _require_env(name: str) -> str:
     value = os.environ.get(name, "").strip()
     if not value:
-        print(f"缺少环境变量: {name}（请在 {PROJECT_DIR / '.env'} 中配置）", file=sys.stderr)
+        sources = f"环境变量 {name}"
+        if DOTENV_PATH.is_file():
+            sources += f" 或 {DOTENV_PATH}"
+        else:
+            sources += f"（本地 {DOTENV_PATH} 不存在）"
+        print(f"缺少配置: {name}（请设置 {sources}）", file=sys.stderr)
         sys.exit(1)
     return value
 
@@ -53,17 +70,176 @@ def _require_env(name: str) -> str:
 def log(msg: str):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
-def run_cmd(cmd: list[str], cwd: str = None) -> tuple[bool, str]:
+def run_cmd(
+    cmd: list[str],
+    cwd: str | None = None,
+    *,
+    env: dict[str, str] | None = None,
+) -> tuple[bool, str]:
     """执行命令，返回 (成功, 输出)"""
     log(f"执行: {' '.join(cmd[:6])}...")
     result = subprocess.run(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
-        cwd=cwd, timeout=1800, stdin=subprocess.DEVNULL,  # 30min, no TTY
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        cwd=cwd,
+        timeout=1800,
+        stdin=subprocess.DEVNULL,  # 30min, no TTY
+        env=env,
     )
     if result.returncode != 0:
         log(f"失败 (rc={result.returncode}): {result.stdout[:500]}")
         return False, result.stdout
     return True, result.stdout
+
+
+STOCK_RECAP_ARGS = [
+    "--mode",
+    "daily",
+    "--provider",
+    "live",
+    "--no-write-files",
+    "--skip-trading-check",
+]
+
+
+def _project_venv_python() -> Path:
+    return PROJECT_DIR / ".venv" / "bin" / "python"
+
+
+def _resolve_uv_bin() -> str | None:
+    """解析 uv 可执行文件；cron 下 PATH 可能不含 uv，故多路径探测。"""
+    candidates: list[str] = []
+    for item in (
+        os.environ.get("UV_BIN", "").strip(),
+        shutil.which("uv"),
+        "/usr/local/bin/uv",
+        str(Path.home() / ".local" / "bin" / "uv"),
+    ):
+        if item and item not in candidates:
+            candidates.append(item)
+    for path in candidates:
+        if Path(path).is_file():
+            return path
+    return None
+
+
+def _uv_subprocess_env() -> dict[str, str]:
+    """避免父进程 VIRTUAL_ENV（如 Hermes）干扰 uv run 的项目解析。"""
+    env = os.environ.copy()
+    for key in ("VIRTUAL_ENV", "UV_PROJECT_ENVIRONMENT"):
+        env.pop(key, None)
+    return env
+
+
+def _venv_is_ready(python: Path) -> bool:
+    if not python.is_file():
+        return False
+    ok, _ = run_cmd(
+        [str(python), "-c", "import agent_platform"],
+        cwd=str(PROJECT_DIR),
+    )
+    return ok
+
+
+def _bootstrap_project_venv(uv_bin: str) -> Path:
+    """用 uv 创建项目 .venv 并 editable 安装。"""
+    python = _project_venv_python()
+    log("初始化项目 Python 环境 (.venv)...")
+    run_cmd([uv_bin, "venv", ".venv"], cwd=str(PROJECT_DIR), env=_uv_subprocess_env())
+    ok, _ = run_cmd([str(python), "-m", "pip", "install", "-e", "."], cwd=str(PROJECT_DIR))
+    if not ok or not python.is_file():
+        log("❌ 无法创建 .venv 环境，请手动安装 uv 或创建 venv")
+        sys.exit(1)
+    log(f"已初始化: {python}")
+    return python
+
+
+@dataclass(frozen=True)
+class _StockRecapRunner:
+    stock_recap_cmd: list[str]
+    aux_argv: list[str]
+    use_uv_env: bool = False
+
+
+def _stock_recap_via_uv(uv_bin: str) -> list[str]:
+    return [uv_bin, "run", "agent-platform", "stock-recap", *STOCK_RECAP_ARGS]
+
+
+def _stock_recap_via_python(python: Path) -> list[str]:
+    return [str(python), "-m", "agent_platform", "stock-recap", *STOCK_RECAP_ARGS]
+
+
+def _cmd_needs_uv_env(cmd: list[str]) -> bool:
+    uv_bin = _resolve_uv_bin()
+    return bool(uv_bin and cmd and cmd[0] == uv_bin)
+
+
+def _aux_python_argv(uv_bin: str | None) -> list[str]:
+    """后续步骤（龙虎榜等）用的 Python 前缀：优先 .venv，否则 uv run python。"""
+    venv_python = _project_venv_python()
+    if _venv_is_ready(venv_python):
+        return [str(venv_python)]
+    if uv_bin:
+        return [uv_bin, "run", "python"]
+    return [str(venv_python)]
+
+
+def _resolve_stock_recap_runner() -> _StockRecapRunner:
+    """降级：uv run → 已有 .venv → uv 初始化 .venv。"""
+    uv_bin = _resolve_uv_bin()
+    venv_python = _project_venv_python()
+    uv_env = _uv_subprocess_env()
+
+    if uv_bin:
+        uv_ok, _ = run_cmd([uv_bin, "run", "--help"], cwd=str(PROJECT_DIR), env=uv_env)
+        if uv_ok:
+            log(f"使用 uv run ({uv_bin})")
+            return _StockRecapRunner(
+                _stock_recap_via_uv(uv_bin),
+                _aux_python_argv(uv_bin),
+                use_uv_env=True,
+            )
+
+    if _venv_is_ready(venv_python):
+        log(f"uv 不可用，降级到: {venv_python}")
+        return _StockRecapRunner(
+            _stock_recap_via_python(venv_python),
+            [str(venv_python)],
+        )
+
+    if uv_bin:
+        python = _bootstrap_project_venv(uv_bin)
+        return _StockRecapRunner(
+            _stock_recap_via_python(python),
+            [str(python)],
+        )
+
+    log("❌ 未找到 uv，且项目 .venv 不可用；请安装 uv 或预先创建 .venv")
+    sys.exit(1)
+
+
+def _run_stock_recap(runner: _StockRecapRunner) -> tuple[bool, str, list[str]]:
+    uv_bin = _resolve_uv_bin()
+    uv_env = _uv_subprocess_env() if runner.use_uv_env else None
+    ok, output = run_cmd(runner.stock_recap_cmd, cwd=str(PROJECT_DIR), env=uv_env)
+    if ok:
+        return ok, output, runner.aux_argv
+
+    if not runner.use_uv_env or not uv_bin:
+        return ok, output, runner.aux_argv
+
+    venv_python = _project_venv_python()
+    if _venv_is_ready(venv_python):
+        log(f"uv run 失败，降级到: {venv_python}")
+        ok, output = run_cmd(_stock_recap_via_python(venv_python), cwd=str(PROJECT_DIR))
+        return ok, output, [str(venv_python)]
+
+    log("uv run 失败，尝试初始化 .venv 后重试...")
+    python = _bootstrap_project_venv(uv_bin)
+    ok, output = run_cmd(_stock_recap_via_python(python), cwd=str(PROJECT_DIR))
+    return ok, output, [str(python)]
 
 def get_access_token() -> str:
     """获取微信 access_token"""
@@ -240,47 +416,10 @@ def main():
     today = datetime.now().strftime("%Y-%m-%d")
     log(f"开始 {today} 日终流程")
 
-    # Step 1: 运行 stock-recap
-    # 降级策略：uv run → .venv/bin/python → 自动创建 venv
+    # Step 1: 运行 stock-recap（uv run → .venv → 初始化 .venv）
     log("Step 1: 生成复盘...")
-    venv_python = str(PROJECT_DIR / ".venv" / "bin" / "python")
-    venv_exists = Path(venv_python).exists()
-
-    # 尝试 uv run
-    uv_ok, _ = run_cmd(["uv", "run", "--help"], cwd=str(PROJECT_DIR))
-    if uv_ok:
-        stock_recap_cmd = ["uv", "run", "agent-platform", "stock-recap",
-                           "--mode", "daily", "--provider", "live",
-                           "--no-write-files", "--skip-trading-check"]
-    elif venv_exists:
-        stock_recap_cmd = [venv_python, "-m", "agent_platform", "stock-recap",
-                           "--mode", "daily", "--provider", "live",
-                           "--no-write-files", "--skip-trading-check"]
-        log(f"uv 不可用，降级到: {venv_python}")
-    else:
-        # 两者都没有，尝试自动创建 venv
-        log("uv 和 .venv 都不存在，尝试自动创建环境...")
-        run_cmd(["uv", "venv", ".venv"], cwd=str(PROJECT_DIR))
-        run_cmd([venv_python, "-m", "pip", "install", "-e", "."], cwd=str(PROJECT_DIR))
-        if not Path(venv_python).exists():
-            log("❌ 无法创建 .venv 环境，请手动安装 uv 或创建 venv")
-            sys.exit(1)
-        stock_recap_cmd = [venv_python, "-m", "agent_platform", "stock-recap",
-                           "--mode", "daily", "--provider", "live",
-                           "--no-write-files", "--skip-trading-check"]
-        log(f"已自动创建环境: {venv_python}")
-
-    ok, output = run_cmd(stock_recap_cmd, cwd=str(PROJECT_DIR))
-    if not ok and stock_recap_cmd[0] == "uv":
-        # uv run 失败（tcsetattr 等），降级到 .venv
-        if not venv_exists:
-            log("uv run 失败且 .venv 不存在，无法降级")
-            sys.exit(1)
-        log(f"uv run 失败，降级到: {venv_python}")
-        stock_recap_cmd = [venv_python, "-m", "agent_platform", "stock-recap",
-                           "--mode", "daily", "--provider", "live",
-                           "--no-write-files", "--skip-trading-check"]
-        ok, output = run_cmd(stock_recap_cmd, cwd=str(PROJECT_DIR))
+    recap_runner = _resolve_stock_recap_runner()
+    ok, output, aux_argv = _run_stock_recap(recap_runner)
     if not ok:
         log("复盘生成失败，中止")
         sys.exit(1)
@@ -318,15 +457,16 @@ def main():
         sys.exit(1)
     log(f"复盘内容: {len(recap_text)} 字")
 
-    # Step 2: 生成龙虎榜（复用 Step 1 的 venv_python）
+    # Step 2: 生成龙虎榜（复用 Step 1 解析出的 Python）
     log("Step 2: 生成龙虎榜...")
     leaderboard_img = LEADERBOARD_DIR / f"leaderboard_{today}.png"
     ok, _ = run_cmd(
-        [venv_python, "leaderboard_summary.py",
+        [*aux_argv, "leaderboard_summary.py",
          "-d", today, "--image-only",
          "--footer-image", "assets/qrcode-wechat.jpg",
          "--footer-image", "assets/qrcode-mini.jpg"],
-        cwd=str(LEADERBOARD_DIR)
+        cwd=str(LEADERBOARD_DIR),
+        env=_uv_subprocess_env() if _cmd_needs_uv_env(aux_argv) else None,
     )
     if not ok or not leaderboard_img.exists():
         log("龙虎榜生成失败，使用素材库已有图片")
