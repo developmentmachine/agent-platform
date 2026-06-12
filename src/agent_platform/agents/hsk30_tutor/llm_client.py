@@ -1,12 +1,48 @@
-"""轻量文本对话 LLM 客户端（与 recap 结构化 ``call_llm`` 解耦）。"""
+"""LLM 客户端 — 支持 client 缓存和网络重试。"""
 from __future__ import annotations
 
 import logging
-from typing import Dict, Iterator, List, Tuple
+import time
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from agent_platform.config.settings import Settings
 
 logger = logging.getLogger("agent_platform.agents.hsk30_tutor.llm_client")
+
+# ── Client 缓存 ──────────────────────────────────────────────
+_cached_client: Any = None
+_cached_key: Tuple[Optional[str], Optional[str]] = (None, None)
+
+
+def _get_client(settings: Settings) -> Any:
+    """获取或创建 OpenAI client（按 api_key + base_url 缓存）。"""
+    global _cached_client, _cached_key
+    key = (settings.openai_api_key, settings.openai_base_url)
+    if _cached_client is not None and _cached_key == key:
+        return _cached_client
+
+    try:
+        from openai import OpenAI
+    except ImportError as e:
+        raise ImportError(f"openai package unavailable: {e}") from e
+
+    _cached_client = OpenAI(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url,
+        timeout=settings.timeout_s,
+    )
+    _cached_key = key
+    return _cached_client
+
+
+# ── 重试逻辑 ─────────────────────────────────────────────────
+_MAX_RETRIES = 2
+_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+
+def _retry_delay(attempt: int, base: float = 1.0) -> float:
+    """指数退避：1s, 2s。"""
+    return base * (2 ** attempt)
 
 
 def chat_completion(
@@ -18,62 +54,83 @@ def chat_completion(
         return _stub_from_messages(messages), "stub"
 
     try:
-        from openai import OpenAI
+        client = _get_client(settings)
     except ImportError as e:
-        logger.warning("openai package unavailable: %s", e)
+        logger.warning("%s", e)
         return _stub_from_messages(messages), "stub"
 
-    client = OpenAI(
-        api_key=settings.openai_api_key,
-        base_url=settings.openai_base_url,
-        timeout=settings.timeout_s,
-    )
-    resp = client.chat.completions.create(
-        model=settings.model,
-        messages=messages,  # type: ignore[arg-type]
-        temperature=settings.temperature,
-    )
-    text = (resp.choices[0].message.content or "").strip()
-    if not text:
-        return _stub_from_messages(messages), "stub"
-    return text, "llm"
+    last_exc: Optional[Exception] = None
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            resp = client.chat.completions.create(
+                model=settings.model,
+                messages=messages,  # type: ignore[arg-type]
+                temperature=settings.temperature,
+            )
+            text = (resp.choices[0].message.content or "").strip()
+            if not text:
+                return _stub_from_messages(messages), "stub"
+            return text, "llm"
+        except Exception as exc:
+            last_exc = exc
+            # 检查是否可重试
+            status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+            if isinstance(status, int) and status in _RETRYABLE_STATUS and attempt < _MAX_RETRIES:
+                delay = _retry_delay(attempt)
+                logger.warning("LLM request failed (status=%s), retry %d/%d in %.1fs",
+                               status, attempt + 1, _MAX_RETRIES, delay)
+                time.sleep(delay)
+                continue
+            # 不可重试的错误
+            logger.error("LLM request failed: %s", exc)
+            break
+
+    return _stub_from_messages(messages), "stub"
 
 
 def chat_completion_stream(
     settings: Settings,
     messages: List[Dict[str, str]],
 ) -> Iterator[Tuple[str, str]]:
-    """流式返回 ``(chunk_text, backend_tag)``。
-
-    每次 yield 一个文本片段；最后一片后结束迭代。
-    无 API Key 时 yield 完整 stub 回复。
-    """
+    """流式返回 ``(chunk_text, backend_tag)``。"""
     if not (settings.openai_api_key or "").strip():
         yield _stub_from_messages(messages), "stub"
         return
 
     try:
-        from openai import OpenAI
+        client = _get_client(settings)
     except ImportError as e:
-        logger.warning("openai package unavailable: %s", e)
+        logger.warning("%s", e)
         yield _stub_from_messages(messages), "stub"
         return
 
-    client = OpenAI(
-        api_key=settings.openai_api_key,
-        base_url=settings.openai_base_url,
-        timeout=settings.timeout_s,
-    )
-    stream = client.chat.completions.create(
-        model=settings.model,
-        messages=messages,  # type: ignore[arg-type]
-        temperature=settings.temperature,
-        stream=True,
-    )
-    for chunk in stream:
-        delta = chunk.choices[0].delta if chunk.choices else None
-        if delta and delta.content:
-            yield delta.content, "llm"
+    last_exc: Optional[Exception] = None
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            stream = client.chat.completions.create(
+                model=settings.model,
+                messages=messages,  # type: ignore[arg-type]
+                temperature=settings.temperature,
+                stream=True,
+            )
+            for chunk in stream:
+                delta = chunk.choices[0].delta if chunk.choices else None
+                if delta and delta.content:
+                    yield delta.content, "llm"
+            return  # 成功完成
+        except Exception as exc:
+            last_exc = exc
+            status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+            if isinstance(status, int) and status in _RETRYABLE_STATUS and attempt < _MAX_RETRIES:
+                delay = _retry_delay(attempt)
+                logger.warning("LLM stream failed (status=%s), retry %d/%d in %.1fs",
+                               status, attempt + 1, _MAX_RETRIES, delay)
+                time.sleep(delay)
+                continue
+            logger.error("LLM stream failed: %s", exc)
+            break
+
+    yield _stub_from_messages(messages), "stub"
 
 
 def _stub_from_messages(messages: List[Dict[str, str]]) -> str:

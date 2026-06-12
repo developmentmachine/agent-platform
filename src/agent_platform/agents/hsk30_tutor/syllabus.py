@@ -127,26 +127,3 @@ def get_recognition_chars(level: int) -> frozenset[str]:
 def get_writing_chars(level: int) -> frozenset[str]:
     """获取指定等级的累积书写字集。"""
     return get_syllabus(level).char_writing
-
-
-def validate_text(text: str, level: int) -> dict:
-    """验证文本是否符合指定等级的字词约束。
-
-    Returns:
-        {"valid": bool, "out_of_vocab": [...], "out_of_recog_chars": [...]}
-    """
-    s = get_syllabus(level)
-    vocab_set = set(s.vocabulary)
-    recog_set = s.char_recognition
-
-    # Check individual characters
-    out_of_recog = []
-    for ch in text:
-        if '\u4e00' <= ch <= '\u9fff' and ch not in recog_set:
-            out_of_recog.append(ch)
-
-    return {
-        "valid": len(out_of_recog) == 0,
-        "out_of_recog_chars": sorted(set(out_of_recog)),
-        "total_chars_checked": sum(1 for c in text if '\u4e00' <= c <= '\u9fff'),
-    }

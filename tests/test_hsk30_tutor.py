@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -86,10 +87,11 @@ def test_http_chat_direct(settings_no_llm):
     from agent_platform.adapters.http.app import create_app
 
     client = TestClient(create_app())
-    r = client.post(
-        "/v1/hsk30-tutor/chat/direct",
-        json={"message": "谢谢", "level": 1},
-    )
+    with patch("agent_platform.agents.hsk30_tutor.use_case.chat_completion", return_value=("谢谢你的提问！", "llm")):
+        r = client.post(
+            "/v1/hsk30-tutor/chat/direct",
+            json={"message": "谢谢", "level": 1},
+        )
     assert r.status_code == 200
     body = r.json()
     assert body["reply"]

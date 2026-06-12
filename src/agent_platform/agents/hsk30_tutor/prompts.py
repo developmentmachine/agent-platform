@@ -41,8 +41,8 @@ def _char_grid(chars: frozenset[str], per_line: int = 40) -> str:
 def _compact_tasks(raw: str) -> str:
     """压缩任务大纲格式：去掉多余空行和页码。"""
     import re
-    # 去掉页码标记
-    text = re.sub(r"\d+\n\n", "", raw)
+    # 去掉页码标记（行内只有纯数字的行）
+    text = re.sub(r"^\d+\s*$", "", raw, flags=re.MULTILINE)
     # 压缩连续空行
     text = re.sub(r"\n{3,}", "\n\n", text)
     # 去掉行首的换行（bullet 格式）
