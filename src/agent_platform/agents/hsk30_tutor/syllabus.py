@@ -13,7 +13,7 @@ import json
 from dataclasses import dataclass
 from functools import lru_cache
 from importlib import resources
-from typing import Callable, Dict, FrozenSet, TypeVar
+from typing import Callable, Dict, FrozenSet, Tuple, TypeVar
 
 from agent_platform.agents import hsk30_tutor as _pkg
 
@@ -29,7 +29,7 @@ class LevelSyllabus:
     tasks: str              # 任务大纲原文
     grammar: str            # 语法大纲原文
     topics: str = ""        # 话题大纲原文
-    vocabulary: tuple = ()  # 累积词汇 tuple[str, ...]
+    vocabulary: FrozenSet[str] = frozenset()  # 累积词汇集
     char_recognition: frozenset = frozenset()  # 累积认读字
     char_writing: frozenset = frozenset()      # 累积书写字
 
@@ -71,7 +71,7 @@ def _build_syllabus() -> Dict[int, LevelSyllabus]:
             tasks=raw.get("tasks", {}).get(key, ""),
             grammar=raw.get("grammar", {}).get(key, ""),
             topics=raw.get("topics", {}).get(key, ""),
-            vocabulary=tuple(sorted(cumulative_vocab[level])),
+            vocabulary=frozenset(cumulative_vocab[level]),
             char_recognition=frozenset(raw_recog.get(key, [])),
             char_writing=frozenset(raw_write.get(write_key, [])),
         )
@@ -112,8 +112,8 @@ def get_grammar(s: LevelSyllabus) -> str:
 
 
 @_syllabus_field
-def get_vocabulary(s: LevelSyllabus) -> tuple[str, ...]:
-    """获取指定等级的累积词汇表（含 1..level 所有词汇）。"""
+def get_vocabulary(s: LevelSyllabus) -> FrozenSet[str]:
+    """获取指定等级的累积词汇集（含 1..level 所有词汇）。"""
     return s.vocabulary
 
 

@@ -3,31 +3,13 @@ from __future__ import annotations
 
 import argparse
 import json
-from io import StringIO
-from typing import Dict, List, Tuple
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from agent_platform.agents.hsk30_tutor.models import TutorChatRequest, TutorChatResponse
+from agent_platform.agents.hsk30_tutor.models import TutorChatRequest
 from agent_platform.agents.hsk30_tutor.validation import validate_reply
-from agent_platform.config.settings import Settings
-
-
-@pytest.fixture
-def settings_no_llm(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    return Settings(_env_file=None, openai_api_key=None, recap_api_key=None)
-
-
-@pytest.fixture
-def settings_with_llm(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    return Settings(
-        _env_file=None, recap_api_key=None,
-        OPENAI_API_KEY="test-key", OPENAI_BASE_URL="http://test", RECAP_MODEL="test-model",
-    )
 
 
 # ── syllabus.py: get_tasks, get_grammar, get_vocabulary, get_writing_chars ──

@@ -1,6 +1,8 @@
 """HSK 3.0 教师 system prompt — 接入考纲数据，严格遵循三阶段九级标准。"""
 from __future__ import annotations
 
+import re
+
 from agent_platform.agents.hsk30_tutor.syllabus import get_syllabus
 from agent_platform.agents.hsk30_tutor.grammar_examples import get_grammar_examples_text
 
@@ -40,7 +42,6 @@ def _char_grid(chars: frozenset[str], per_line: int = 40) -> str:
 
 def _compact_tasks(raw: str) -> str:
     """压缩任务大纲格式：去掉多余空行和页码。"""
-    import re
     # 去掉页码标记（行内只有纯数字的行）
     text = re.sub(r"^\d+\s*$", "", raw, flags=re.MULTILINE)
     # 压缩连续空行
@@ -50,23 +51,20 @@ def _compact_tasks(raw: str) -> str:
     return text.strip()
 
 
-def _vocab_compact(vocab: tuple[str, ...], level: int) -> str:
+def _vocab_compact(vocab: frozenset[str]) -> str:
     """生成紧凑的词汇列表。
 
-    策略：
-    - Level 1-5：全量展示
-    - Level 6：前 1500 核心词 + 扩展词数
-    - Level 7-9：前 2000 核心词 + 扩展词数
+    策略：所有等级最多展示 1500 核心词 + 扩展词数。
+    高级别需要更多核心词覆盖，但 prompt token 预算有限。
     """
-    if level <= 5:
-        return "、".join(vocab)
-    # 高级别：分层展示
-    core_limit = 2000 if level >= 7 else 1500
-    core = vocab[:core_limit]
-    remaining = len(vocab) - core_limit
+    core_limit = 1500
+    sorted_vocab = sorted(vocab)
+    if len(sorted_vocab) <= core_limit:
+        return "、".join(sorted_vocab)
+    core = sorted_vocab[:core_limit]
+    remaining = len(sorted_vocab) - core_limit
     result = "、".join(core)
-    if remaining > 0:
-        result += f"\n\n（以上为核心词 {core_limit} 个，另有扩展词 {remaining} 个，共 {len(vocab)} 词。回复时优先使用核心词。）"
+    result += f"\n\n（以上为核心词 {core_limit} 个，另有扩展词 {remaining} 个，共 {len(sorted_vocab)} 词。回复时优先使用核心词。）"
     return result
 
 
@@ -84,7 +82,7 @@ def build_system_prompt(*, level: int, explain_locale: str) -> str:
     recog_grid = _char_grid(s.char_recognition)
 
     # 词汇列表
-    vocab_text = _vocab_compact(s.vocabulary, level)
+    vocab_text = _vocab_compact(s.vocabulary)
 
     # 语法例句
     examples_text = get_grammar_examples_text(level)

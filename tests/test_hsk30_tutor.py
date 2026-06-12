@@ -5,24 +5,14 @@ import argparse
 import importlib
 from unittest.mock import patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from agent_platform.agents.hsk30_tutor.models import TutorChatRequest
 from agent_platform.agents.hsk30_tutor.use_case import chat_turn
-from agent_platform.config.settings import Settings
 from agent_platform.core.registry.agent_registry import AgentRegistry
 from agent_platform.core.runtime.principal import PrincipalContext
 from agent_platform.core.runtime.run_context import RunContext
 from agent_platform.runtime.factory import create_runtime, register_builtin_agents
-
-
-@pytest.fixture
-def settings_no_llm(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    # _env_file=None prevents pydantic-settings from loading .env
-    return Settings(_env_file=None, openai_api_key=None, recap_api_key=None)
-
 
 def test_builtin_registry_has_two_agents():
     reg = AgentRegistry()

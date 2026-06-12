@@ -64,6 +64,9 @@ def _stream_runner(req: TutorChatRequest, settings: Any, run_ctx: RunContext) ->
 # ── 注册 ────────────────────────────────────────────────────
 
 def register(registry: AgentRegistry) -> None:
+    from agent_platform.agents.hsk30_tutor.cli import register_subparser, run
+    from agent_platform.agents.hsk30_tutor.http_routes import router
+
     registry.register(AgentDefinition(
         id=AGENT_ID,
         display_name="HSK 3.0 中文陪练",
@@ -76,15 +79,9 @@ def register(registry: AgentRegistry) -> None:
         skills=[],
         cli_help="HSK 3.0 对话陪练（交互模式；--once -m 单轮）",
         http_path_prefix="/v1/hsk30-tutor",
-        cli_subparser_factory=lambda sub: __import__(
-            "agent_platform.agents.hsk30_tutor.cli", fromlist=["register_subparser"]
-        ).register_subparser(sub),
-        cli_run_handler=lambda args, settings, parser: __import__(
-            "agent_platform.agents.hsk30_tutor.cli", fromlist=["run"]
-        ).run(args, settings, parser),
-        http_router_factories=[lambda: [__import__(
-            "agent_platform.agents.hsk30_tutor.http_routes", fromlist=["router"]
-        ).router]],
+        cli_subparser_factory=lambda sub: register_subparser(sub),
+        cli_run_handler=lambda args, settings, parser: run(args, settings, parser),
+        http_router_factories=[lambda: [router]],
     ))
     logger.debug("registered agent id=%s", AGENT_ID)
 

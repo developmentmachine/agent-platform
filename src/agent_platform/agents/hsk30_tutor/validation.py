@@ -12,8 +12,8 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
-from typing import FrozenSet, List, Set, Tuple
+from dataclasses import dataclass
+from typing import FrozenSet, List, Set
 
 from agent_platform.agents.hsk30_tutor.syllabus import get_syllabus
 
@@ -66,8 +66,8 @@ def _extract_chinese_segments(text: str) -> List[str]:
     return re.findall(r"[\u4e00-\u9fff]+", text)
 
 
-def _is_in_proper_noun_context(text: str, pos: int, char: str) -> bool:
-    """判断字符是否在专有名词上下文中（人名/地名用字）。
+def _is_proper_noun_char(char: str) -> bool:
+    """判断字符是否属于专有名词用字（人名/地名）。
 
     语言学依据：专有名词不属于词汇大纲范围。
     HSK 考试大纲明确说明"词汇表不收录专有名词"。
@@ -105,13 +105,13 @@ def validate_reply(text: str, level: int) -> ValidationResult:
     """
     s = get_syllabus(level)
     recog = s.char_recognition
-    vocab_set: FrozenSet[str] = frozenset(s.vocabulary)
+    vocab_set = s.vocabulary  # already FrozenSet[str]
 
     # ── 汉字级验证 ──
     chinese_chars = [ch for ch in text if "\u4e00" <= ch <= "\u9fff"]
     out_of_recog = sorted({
         ch for ch in chinese_chars
-        if ch not in recog and not _is_in_proper_noun_context(text, 0, ch)
+        if ch not in recog and not _is_proper_noun_char(ch)
     })
     total_chars = len(chinese_chars)
     char_pct = ((total_chars - len(out_of_recog)) / total_chars * 100) if total_chars > 0 else 100.0
@@ -130,7 +130,7 @@ def validate_reply(text: str, level: int) -> ValidationResult:
                 out_of_vocab_set.add(w)
             elif len(w) == 1 and w not in vocab_set:
                 # 单字词：如果不在认读字表且不是专有名词用字才算超纲
-                if w not in recog and not _is_in_proper_noun_context(text, 0, w):
+                if w not in recog and not _is_proper_noun_char(w):
                     out_of_vocab_set.add(w)
 
     total_words = len(all_words)

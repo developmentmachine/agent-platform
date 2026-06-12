@@ -236,8 +236,8 @@ class TestBuildSystemPrompt:
     def test_vocab_compact_low_level_full(self):
         """低级别词汇应全量展示。"""
         from agent_platform.agents.hsk30_tutor.prompts import _vocab_compact
-        vocab = ("你好", "谢谢", "再见")
-        result = _vocab_compact(vocab, 1)
+        vocab = frozenset({"你好", "谢谢", "再见"})
+        result = _vocab_compact(vocab)
         assert "你好" in result
         assert "谢谢" in result
         assert "再见" in result

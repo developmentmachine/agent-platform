@@ -1,7 +1,7 @@
 """HSK 3.0 Tutor 重试修正机制测试。"""
 from __future__ import annotations
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
@@ -12,15 +12,8 @@ from agent_platform.agents.hsk30_tutor.use_case import (
     chat_turn,
     chat_turn_stream,
 )
-from agent_platform.agents.hsk30_tutor.validation import ValidationResult, validate_reply
-from agent_platform.config.settings import Settings
+from agent_platform.agents.hsk30_tutor.validation import ValidationResult
 from agent_platform.core.runtime.run_context import RunContext
-
-
-@pytest.fixture
-def settings_no_llm(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    return Settings(_env_file=None, openai_api_key=None, recap_api_key=None)
 
 
 class TestBuildCorrectionMessage:

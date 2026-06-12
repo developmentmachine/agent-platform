@@ -101,13 +101,14 @@ def _validate_and_retry(
 @_with_agent_scope
 def chat_turn(req: TutorChatRequest, settings: Settings, *, ctx: RunContext | None = None) -> TutorChatResponse:
     run_ctx = (ctx or RunContext.new()).with_overrides(agent_id=AGENT_ID)
-    reply, backend = chat_completion(settings, _build_messages(req))
+    messages = _build_messages(req)
+    reply, backend = chat_completion(settings, messages)
 
     note = None
     if backend == "stub":
         note = "未连接 LLM；设置 OPENAI_API_KEY 后启用完整陪练。"
     else:
-        reply, validation = _validate_and_retry(_build_messages(req), reply, req.level, settings, backend)
+        reply, validation = _validate_and_retry(messages, reply, req.level, settings, backend)
         if not validation.valid:
             logger.warning("HSK level %d validation: chars=%d vocab=%d (after retries)",
                            req.level, len(validation.out_of_recognition), len(validation.out_of_vocabulary))
@@ -121,7 +122,6 @@ def chat_turn(req: TutorChatRequest, settings: Settings, *, ctx: RunContext | No
 def chat_turn_stream(req: TutorChatRequest, settings: Settings, *, ctx: RunContext | None = None,
                      ) -> Iterator[Tuple[str, str]]:
     """流式版本：yield (chunk_text, backend_tag)，流结束后验证全文。"""
-    run_ctx = (ctx or RunContext.new()).with_overrides(agent_id=AGENT_ID)  # noqa: F841
     messages = _build_messages(req)
 
     full_reply, backend = "", "stub"
