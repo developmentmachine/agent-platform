@@ -59,7 +59,6 @@ def chat_completion(
         logger.warning("%s", e)
         return _stub_from_messages(messages), "stub"
 
-    last_exc: Optional[Exception] = None
     for attempt in range(_MAX_RETRIES + 1):
         try:
             resp = client.chat.completions.create(
@@ -72,7 +71,6 @@ def chat_completion(
                 return _stub_from_messages(messages), "stub"
             return text, "llm"
         except Exception as exc:
-            last_exc = exc
             # 检查是否可重试
             status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
             if isinstance(status, int) and status in _RETRYABLE_STATUS and attempt < _MAX_RETRIES:
@@ -104,7 +102,6 @@ def chat_completion_stream(
         yield _stub_from_messages(messages), "stub"
         return
 
-    last_exc: Optional[Exception] = None
     for attempt in range(_MAX_RETRIES + 1):
         try:
             stream = client.chat.completions.create(
@@ -119,7 +116,6 @@ def chat_completion_stream(
                     yield delta.content, "llm"
             return  # 成功完成
         except Exception as exc:
-            last_exc = exc
             status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
             if isinstance(status, int) and status in _RETRYABLE_STATUS and attempt < _MAX_RETRIES:
                 delay = _retry_delay(attempt)

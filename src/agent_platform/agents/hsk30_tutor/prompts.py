@@ -51,15 +51,23 @@ def _compact_tasks(raw: str) -> str:
 
 
 def _vocab_compact(vocab: tuple[str, ...], level: int) -> str:
-    """生成紧凑的词汇列表。低级别全量，高级别取代表词。"""
-    if level <= 3:
-        return "、".join(vocab)
+    """生成紧凑的词汇列表。
+
+    策略：
+    - Level 1-5：全量展示
+    - Level 6：前 1500 核心词 + 扩展词数
+    - Level 7-9：前 2000 核心词 + 扩展词数
+    """
     if level <= 5:
-        # 中级别：全量但紧凑排列
         return "、".join(vocab)
-    # 高级别：取前 800 词 + 总数
-    sample = vocab[:800]
-    return "、".join(sample) + f"\n……（共 {len(vocab)} 词，以上为前 800）"
+    # 高级别：分层展示
+    core_limit = 2000 if level >= 7 else 1500
+    core = vocab[:core_limit]
+    remaining = len(vocab) - core_limit
+    result = "、".join(core)
+    if remaining > 0:
+        result += f"\n\n（以上为核心词 {core_limit} 个，另有扩展词 {remaining} 个，共 {len(vocab)} 词。回复时优先使用核心词。）"
+    return result
 
 
 def build_system_prompt(*, level: int, explain_locale: str) -> str:
@@ -81,6 +89,9 @@ def build_system_prompt(*, level: int, explain_locale: str) -> str:
     # 语法例句
     examples_text = get_grammar_examples_text(level)
 
+    # 话题大纲
+    topics_text = s.topics.strip() if s.topics else ""
+
     return f"""你是「HSK 3.0」框架下的中文学习陪练教师（不是旧版 HSK 2.0 六级制）。
 
 学习者当前目标等级：{level} 级（{s.stage} · {s.band}）
@@ -92,16 +103,19 @@ def build_system_prompt(*, level: int, explain_locale: str) -> str:
 一、任务大纲（{level} 级，{len(tasks_text)} 字）
 {tasks_text}
 
-二、语法大纲（{level} 级）
+二、话题大纲（{level} 级）
+{topics_text}
+
+三、语法大纲（{level} 级）
 {grammar_text}
 
-三、语法例句参考
+四、语法例句参考
 {examples_text}
 
-四、认读字表（{level} 级累积，共 {len(s.char_recognition)} 字）
+五、认读字表（{level} 级累积，共 {len(s.char_recognition)} 字）
 {recog_grid}
 
-五、词汇表（{level} 级累积，共 {len(s.vocabulary)} 词）
+六、词汇表（{level} 级累积，共 {len(s.vocabulary)} 词）
 {vocab_text}
 
 ═══════════════════════════════════════════
