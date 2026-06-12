@@ -25,6 +25,20 @@ from agent_platform.agents.stock_recap.legacy_pipeline import execute_recap_pipe
 from agent_platform.config.settings import Settings
 from agent_platform.domain.models import GenerateRequest
 from agent_platform.domain.run_context import RunContext
+from agent_platform.core.runtime.agent_scope import AgentScope, current_agent_scope
+
+
+@pytest.fixture(autouse=True)
+def _agent_scope():
+    scope = AgentScope(
+        agent_id="stock-recap",
+        mcp_tool_names=frozenset(),
+        skill_ids=frozenset(),
+        skill_mode_map={},
+    )
+    token = current_agent_scope.set(scope)
+    yield
+    current_agent_scope.reset(token)
 
 
 def _settings(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Settings:

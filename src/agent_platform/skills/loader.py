@@ -317,10 +317,12 @@ def load_skill_overlay_for_mode(
 
     scope = current_agent_scope.get()
     if scope is None:
-        raise RuntimeError(
-            "load_skill_overlay_for_mode requires an active AgentScope; "
-            "run inside agent_execution() or AgentRuntime.run()"
+        import logging
+        logging.getLogger(__name__).debug(
+            "load_skill_overlay_for_mode: no active AgentScope; skipping skill overlay "
+            "(expected in async streaming contexts where ContextVar propagation is limited)"
         )
+        return None
     return load_skill_overlay_for_agent(scope, mode, override_skill_id=override_skill_id)
 
 

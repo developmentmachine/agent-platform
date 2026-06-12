@@ -12,11 +12,28 @@
 """
 from __future__ import annotations
 
+import pytest
+
+from agent_platform.core.runtime.agent_scope import AgentScope, current_agent_scope
 from agent_platform.agents.stock_recap.data.collector import collect_snapshot
 from agent_platform.agents.stock_recap.data.features import build_features
 from agent_platform.agents.stock_recap.llm.prompts import build_messages
 
 from tests.golden._compare import assert_matches_golden_json
+
+
+@pytest.fixture(autouse=True)
+def _agent_scope():
+    """Set up a minimal AgentScope so load_skill_overlay_for_mode works."""
+    scope = AgentScope(
+        agent_id="stock-recap",
+        mcp_tool_names=frozenset(),
+        skill_ids=frozenset(),
+        skill_mode_map={},
+    )
+    token = current_agent_scope.set(scope)
+    yield
+    current_agent_scope.reset(token)
 
 
 _FIXED_DATE = "2025-03-04"

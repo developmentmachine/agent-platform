@@ -17,7 +17,13 @@ def agent_execution(defn: AgentDefinition) -> Iterator[AgentScope]:
     try:
         yield scope
     finally:
-        current_agent_scope.reset(token)
+        try:
+            current_agent_scope.reset(token)
+        except ValueError:
+            # Token was created in a different async context (e.g. anyio
+            # threadpool for streaming responses).  Clear the variable
+            # in the current context instead of resetting the stale token.
+            current_agent_scope.set(None)
 
 
 @contextmanager

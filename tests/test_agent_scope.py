@@ -54,8 +54,10 @@ def test_mcp_execute_forbidden_when_agent_has_no_tools(tools_enabled_settings: S
 
 
 def test_skill_overlay_requires_agent_scope():
-    with pytest.raises(RuntimeError, match="AgentScope"):
-        load_skill_overlay_for_mode("daily")
+    # Without an active AgentScope, load_skill_overlay_for_mode returns None
+    # (graceful degradation for async streaming contexts)
+    result = load_skill_overlay_for_mode("daily")
+    assert result is None
 
 
 def test_skill_overlay_uses_agent_mode_map():
