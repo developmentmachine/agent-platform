@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import List
 
 from agent_platform.agents.hsk30_tutor.llm_client import chat_completion
-from agent_platform.agents.hsk30_tutor.manifest import AGENT_ID
+from agent_platform.agents.hsk30_tutor import AGENT_ID
 from agent_platform.agents.hsk30_tutor.models import TutorChatRequest, TutorChatResponse
 from agent_platform.agents.hsk30_tutor.prompts import build_system_prompt
 from agent_platform.config.settings import Settings
