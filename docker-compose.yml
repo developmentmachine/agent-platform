@@ -97,3 +97,40 @@ services:
     restart: unless-stopped
     depends_on:
       - stock-recap
+
+  # 微信公众号日终草稿（一次性任务，默认不随 compose up 启动）。
+  # 手动：docker compose --profile wechat run --rm wechat-publish
+  # 定时：宿主机 crontab 调用上述命令，或使用 Hermes cron 触发。
+  wechat-publish:
+    image: ${IMAGE_NAME:-agent-platform:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["wechat"]
+    init: true
+    command: ["python", "stock-leaderboard/daily_wechat_publish.py"]
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      RECAP_DB_PATH: ${RECAP_DOCKER_DB_PATH:-/data/recap_system.db}
+      RECAP_OUTPUT_DIR: ${RECAP_DOCKER_OUTPUT_DIR:-/data/reports}
+      RECAP_LOG_LEVEL: ${RECAP_LOG_LEVEL:-INFO}
+      RECAP_AGENT_MAX_WALL_MS: ${RECAP_AGENT_MAX_WALL_MS:-600000}
+
+      RECAP_LLM_BACKEND: ${RECAP_LLM_BACKEND:-}
+      RECAP_MODEL: ${RECAP_MODEL:-gpt-4o-mini}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+
+      WECHAT_APPID: ${WECHAT_APPID:-}
+      WECHAT_SECRET: ${WECHAT_SECRET:-}
+      WECHAT_AUTHOR: ${WECHAT_AUTHOR:-Agent Platform}
+      WECHAT_WEBHOOK_URL: ${WECHAT_WEBHOOK_URL:-}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+
+      UV_BIN: ${UV_BIN:-/usr/local/bin/uv}
+
+    volumes:
+      - ./data:/data
+
+    restart: "no"

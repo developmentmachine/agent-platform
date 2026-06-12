@@ -221,6 +221,23 @@ curl http://localhost:8000/healthz
 docker compose down
 ```
 
+### 微信公众号日终草稿（可选）
+
+与 Hermes 解耦：凭证与运行时均在 agent-platform 镜像内完成。
+
+```bash
+# .env 中填写 WECHAT_APPID、WECHAT_SECRET、OPENAI_API_KEY 等
+docker compose --profile wechat run --rm wechat-publish
+```
+
+宿主机定时（示例：工作日 17:00 北京时间）：
+
+```cron
+0 17 * * 1-5 cd /path/to/agent-platform && docker compose --profile wechat run --rm wechat-publish
+```
+
+`wechat` profile 不会随默认 `docker compose up -d` 启动，不影响 API / QQ 机器人服务。
+
 如果只想手动构建/运行镜像：
 
 ```bash
