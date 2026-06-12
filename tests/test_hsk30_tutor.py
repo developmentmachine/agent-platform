@@ -19,7 +19,8 @@ from agent_platform.runtime.factory import create_runtime, register_builtin_agen
 @pytest.fixture
 def settings_no_llm(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    return Settings(openai_api_key=None, recap_api_key=None)
+    # _env_file=None prevents pydantic-settings from loading .env
+    return Settings(_env_file=None, openai_api_key=None, recap_api_key=None)
 
 
 def test_builtin_registry_has_two_agents():
