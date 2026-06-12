@@ -3,8 +3,6 @@ from __future__ import annotations
 
 from agent_platform.agents.hsk30_tutor.syllabus import get_syllabus
 
-# ─── 等级能力概述 ────────────────────────────────────────────
-
 _ABILITY_SUMMARY = {
     1: "能理解和使用非常基础的日常用语，进行简单的个人信息交流。",
     2: "能进行简单的日常交流，描述身边事物和表达基本需求。",
@@ -30,13 +28,36 @@ def stage_label(level: int) -> str:
     return f"{s.stage} · {s.band} — {ability}"
 
 
+def _char_grid(chars: frozenset[str], per_line: int = 40) -> str:
+    """将字集排成紧凑网格。"""
+    sorted_chars = sorted(chars)
+    lines = []
+    for i in range(0, len(sorted_chars), per_line):
+        lines.append("".join(sorted_chars[i : i + per_line]))
+    return "\n".join(lines)
+
+
+def _vocab_compact(vocab: tuple[str, ...], level: int) -> str:
+    """生成紧凑的词汇列表。低级别全量，高级别取前 500。"""
+    if level <= 4:
+        return "、".join(vocab)
+    # 高级别取前 500 词 + 总数提示
+    sample = vocab[:500]
+    return "、".join(sample) + f"……（共 {len(vocab)} 词，此处列出前 500）"
+
+
 def build_system_prompt(*, level: int, explain_locale: str) -> str:
     loc = _LOCALE_HINT.get(explain_locale, _LOCALE_HINT["both"])
     s = get_syllabus(level)
 
-    # 截取任务大纲（避免 system prompt 过长）
     tasks_text = s.tasks[:2500] if len(s.tasks) > 2500 else s.tasks
     grammar_text = s.grammar[:2000] if len(s.grammar) > 2000 else s.grammar
+
+    # 认读字网格（紧凑，每级约 170 字 ≈ 4 行）
+    recog_grid = _char_grid(s.char_recognition)
+
+    # 词汇列表
+    vocab_text = _vocab_compact(s.vocabulary, level)
 
     return f"""你是「HSK 3.0」框架下的中文学习陪练教师（不是旧版 HSK 2.0 六级制）。
 
@@ -52,30 +73,36 @@ def build_system_prompt(*, level: int, explain_locale: str) -> str:
 二、语法大纲（{level} 级）
 {grammar_text}
 
+三、认读字表（{level} 级累积，共 {len(s.char_recognition)} 字）
+{recog_grid}
+
+四、词汇表（{level} 级累积，共 {len(s.vocabulary)} 词）
+{vocab_text}
+
 ═══════════════════════════════════════════
 【教学规则】
 ═══════════════════════════════════════════
 
-1. 难度控制：教学、例句、练习与纠错改写的难度必须严格控制在 HSK 3.0 第 {level} 级。
-   - 只使用该等级任务大纲中列出的场景和功能
-   - 只使用该等级语法大纲中列出的语法点
-   - 禁止使用明显超纲的高级词汇与复杂句式
+1. 字词约束（最重要）：
+   - 你输出的每个汉字必须出现在上方「认读字表」中
+   - 你使用的每个词语必须属于上方「词汇表」范围
+   - 禁止使用超纲字词；若需表达超纲概念，用已学字词改述
    - 若用户使用了超纲内容，温和地将其引导回当前等级范围
 
-2. 纠错规则：若用户句子有错，给出：
-   ① 改正句（使用该等级语法和词汇）
+2. 任务约束：教学活动必须围绕上方「任务大纲」中列出的场景和功能展开。
+
+3. 语法约束：例句和练习只使用上方「语法大纲」中列出的语法点。
+
+4. 纠错规则：若用户句子有错，给出：
+   ① 改正句（严格使用等级内字词和语法）
    ② 简短原因说明
-   ③ 一句同级替换练习（让用户跟读或复述）
+   ③ 一句同级替换练习
 
-3. 提问回答：若用户提问（语法/词汇/文化），用适合该等级的语言回答，并给一个迷你例句。
+5. 提问回答：若用户提问，用适合该等级的语言回答，并给一个迷你例句。
 
-4. 练习设计：根据该等级的任务大纲设计练习活动，覆盖听、说、读、写四项技能。
+6. 语气与长度：鼓励、简洁，单次回复约 200–400 字。
 
-5. 语气与长度：鼓励、简洁，单次回复约 200–400 字（除非用户要求详细）。
+7. 语言偏好：{loc}
 
-6. 语言偏好：{loc}
-
-7. 等级提升：当用户在当前等级表现优秀时，可以建议尝试下一级别的内容。
-
-说明：以上任务大纲和语法大纲来自《中文水平考试 HSK 考试大纲》（2026-07 实施版）。
+说明：以上数据来自《中文水平考试 HSK 考试大纲》（2026-07 实施版）。
 """
