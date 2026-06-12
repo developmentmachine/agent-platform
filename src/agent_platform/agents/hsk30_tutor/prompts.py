@@ -37,23 +37,41 @@ def _char_grid(chars: frozenset[str], per_line: int = 40) -> str:
     return "\n".join(lines)
 
 
+def _compact_tasks(raw: str) -> str:
+    """压缩任务大纲格式：去掉多余空行和页码。"""
+    import re
+    # 去掉页码标记
+    text = re.sub(r"\d+\n\n", "", raw)
+    # 压缩连续空行
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    # 去掉行首的换行（bullet 格式）
+    text = re.sub(r"\n(?=[一二三四五六七八九十]、)", "\n", text)
+    return text.strip()
+
+
 def _vocab_compact(vocab: tuple[str, ...], level: int) -> str:
-    """生成紧凑的词汇列表。低级别全量，高级别取前 500。"""
-    if level <= 4:
+    """生成紧凑的词汇列表。低级别全量，高级别取代表词。"""
+    if level <= 3:
         return "、".join(vocab)
-    # 高级别取前 500 词 + 总数提示
-    sample = vocab[:500]
-    return "、".join(sample) + f"……（共 {len(vocab)} 词，此处列出前 500）"
+    if level <= 5:
+        # 中级别：全量但紧凑排列
+        return "、".join(vocab)
+    # 高级别：取前 800 词 + 总数
+    sample = vocab[:800]
+    return "、".join(sample) + f"\n……（共 {len(vocab)} 词，以上为前 800）"
 
 
 def build_system_prompt(*, level: int, explain_locale: str) -> str:
     loc = _LOCALE_HINT.get(explain_locale, _LOCALE_HINT["both"])
     s = get_syllabus(level)
 
-    tasks_text = s.tasks[:2500] if len(s.tasks) > 2500 else s.tasks
-    grammar_text = s.grammar[:2000] if len(s.grammar) > 2000 else s.grammar
+    # 全量任务大纲（压缩格式）
+    tasks_text = _compact_tasks(s.tasks)
 
-    # 认读字网格（紧凑，每级约 170 字 ≈ 4 行）
+    # 语法大纲（全量）
+    grammar_text = s.grammar.strip()
+
+    # 认读字网格
     recog_grid = _char_grid(s.char_recognition)
 
     # 词汇列表
@@ -67,7 +85,7 @@ def build_system_prompt(*, level: int, explain_locale: str) -> str:
 【考纲约束 — 必须严格遵守】
 ═══════════════════════════════════════════
 
-一、任务大纲（{level} 级）
+一、任务大纲（{level} 级，{len(tasks_text)} 字）
 {tasks_text}
 
 二、语法大纲（{level} 级）
