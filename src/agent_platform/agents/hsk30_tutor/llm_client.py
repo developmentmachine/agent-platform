@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, Iterator, List, Tuple
 
 from agent_platform.config.settings import Settings
 
@@ -37,6 +37,43 @@ def chat_completion(
     if not text:
         return _stub_from_messages(messages), "stub"
     return text, "llm"
+
+
+def chat_completion_stream(
+    settings: Settings,
+    messages: List[Dict[str, str]],
+) -> Iterator[Tuple[str, str]]:
+    """流式返回 ``(chunk_text, backend_tag)``。
+
+    每次 yield 一个文本片段；最后一片后结束迭代。
+    无 API Key 时 yield 完整 stub 回复。
+    """
+    if not (settings.openai_api_key or "").strip():
+        yield _stub_from_messages(messages), "stub"
+        return
+
+    try:
+        from openai import OpenAI
+    except ImportError as e:
+        logger.warning("openai package unavailable: %s", e)
+        yield _stub_from_messages(messages), "stub"
+        return
+
+    client = OpenAI(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url,
+        timeout=settings.timeout_s,
+    )
+    stream = client.chat.completions.create(
+        model=settings.model,
+        messages=messages,  # type: ignore[arg-type]
+        temperature=settings.temperature,
+        stream=True,
+    )
+    for chunk in stream:
+        delta = chunk.choices[0].delta if chunk.choices else None
+        if delta and delta.content:
+            yield delta.content, "llm"
 
 
 def _stub_from_messages(messages: List[Dict[str, str]]) -> str:

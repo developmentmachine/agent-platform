@@ -1,7 +1,9 @@
-"""HTTP：``POST /v1/hsk30-tutor/chat``。"""
+"""HTTP：``POST /v1/hsk30-tutor/chat`` + ``POST /v1/hsk30-tutor/chat/stream``。"""
 from __future__ import annotations
 
+import json
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 
 from agent_platform.core.http import require_api_key, require_rate_limit
 from agent_platform.agents.hsk30_tutor.models import TutorChatRequest, TutorChatResponse
@@ -28,6 +30,27 @@ def tutor_chat(
         principal=_principal,
     )
     return TutorChatResponse.model_validate(envelope.payload)
+
+
+@router.post("/chat/stream")
+def tutor_chat_stream(
+    body: TutorChatRequest,
+    settings: Settings = Depends(get_settings),
+    _principal: PrincipalContext = Depends(require_api_key),
+    _rate: None = Depends(require_rate_limit),
+) -> StreamingResponse:
+    """流式对话端点：返回 NDJSON 流。"""
+    runtime = create_runtime(settings)
+
+    def generate():
+        for event in runtime.stream(
+            agent_id="hsk30-tutor",
+            payload=body.model_dump(),
+            principal=_principal,
+        ):
+            yield json.dumps(event, ensure_ascii=False) + "\n"
+
+    return StreamingResponse(generate(), media_type="application/x-ndjson")
 
 
 @router.post("/chat/direct", response_model=TutorChatResponse, include_in_schema=False)
