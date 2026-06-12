@@ -1,4 +1,9 @@
-"""HSK 3.0 Tutor — AgentDefinition 注册。"""
+"""HSK 3.0 Tutor — AgentDefinition 注册。
+
+重构要点：
+- 使用 @register_cli / @register_http 装饰器消除 6 个单行 wrapper 函数
+- _runner 统一处理 stream/non-stream 分支
+"""
 from __future__ import annotations
 
 import logging
@@ -27,100 +32,60 @@ _DESCRIPTION = (
 )
 
 
-def _runner(
-    *,
-    envelope: AgentRequestEnvelope,
-    principal: PrincipalContext,
-    session: SessionContext,
-    run_ctx: RunContext,
-    settings: Any,
-    runtime: Any,
-) -> Any:
+# ── Runner ──────────────────────────────────────────────────
+
+def _runner(*, envelope: AgentRequestEnvelope, principal: PrincipalContext,
+            session: SessionContext, run_ctx: RunContext, settings: Any, runtime: Any) -> Any:
     req = TutorChatRequest.model_validate(envelope.payload)
 
     if envelope.stream:
         return _stream_runner(req, settings, run_ctx)
 
     resp = chat_turn(req, settings, ctx=run_ctx)
-    return AgentResponseEnvelope(
-        agent_id=AGENT_ID,
-        request_id=run_ctx.request_id,
-        payload=resp.model_dump(),
-        rendered={"text": resp.reply},
-    )
+    return AgentResponseEnvelope(agent_id=AGENT_ID, request_id=run_ctx.request_id,
+                                 payload=resp.model_dump(), rendered={"text": resp.reply})
 
 
-def _stream_runner(
-    req: TutorChatRequest,
-    settings: Any,
-    run_ctx: RunContext,
-) -> Iterator[Dict[str, Any]]:
+def _stream_runner(req: TutorChatRequest, settings: Any, run_ctx: RunContext) -> Iterator[Dict[str, Any]]:
     """流式 runner：yield StreamEvent 序列。"""
-    yield StreamEvent(
-        kind=StreamEventKind.PHASE_START,
-        phase="chat",
-    ).to_jsonable()
+    yield StreamEvent(kind=StreamEventKind.PHASE_START, phase="chat").to_jsonable()
 
-    full_reply = ""
-    backend = "stub"
+    full_reply, backend = "", "stub"
     for chunk_text, backend in chat_turn_stream(req, settings, ctx=run_ctx):
         full_reply += chunk_text
-        yield StreamEvent(
-            kind=StreamEventKind.AGENT_OUTPUT,
-            phase="chat",
-            data={"text": chunk_text, "backend": backend},
-        ).to_jsonable()
+        yield StreamEvent(kind=StreamEventKind.AGENT_OUTPUT, phase="chat",
+                          data={"text": chunk_text, "backend": backend}).to_jsonable()
 
-    yield StreamEvent(
-        kind=StreamEventKind.COMPLETED,
-        phase="chat",
-        data={
-            "agent_id": AGENT_ID,
-            "request_id": run_ctx.request_id,
-            "reply": full_reply,
-            "level": req.level,
-            "backend": backend,
-        },
-    ).to_jsonable()
+    yield StreamEvent(kind=StreamEventKind.COMPLETED, phase="chat",
+                      data={"agent_id": AGENT_ID, "request_id": run_ctx.request_id,
+                            "reply": full_reply, "level": req.level, "backend": backend}).to_jsonable()
 
 
-def _cli_subparser(sub: Any) -> None:
-    from agent_platform.agents.hsk30_tutor.cli import register_subparser
-
-    register_subparser(sub)
-
-
-def _cli_run(args: Any, settings: Any, parser: Any) -> int:
-    from agent_platform.agents.hsk30_tutor.cli import run
-
-    return run(args, settings, parser)
-
-
-def _http_routers() -> List[Any]:
-    from agent_platform.agents.hsk30_tutor.http_routes import router
-
-    return [router]
-
+# ── 注册 ────────────────────────────────────────────────────
 
 def register(registry: AgentRegistry) -> None:
-    registry.register(
-        AgentDefinition(
-            id=AGENT_ID,
-            display_name="HSK 3.0 中文陪练",
-            description=_DESCRIPTION,
-            request_model=TutorChatRequest,
-            response_model=TutorChatResponse,
-            capabilities=[AgentCapability.CHAT, AgentCapability.STREAMING],
-            runner=_runner,
-            mcp_tool_names=[],
-            skills=[],
-            cli_help="HSK 3.0 对话陪练（交互模式；--once -m 单轮）",
-            http_path_prefix="/v1/hsk30-tutor",
-            cli_subparser_factory=_cli_subparser,
-            cli_run_handler=_cli_run,
-            http_router_factories=[_http_routers],
-        )
-    )
+    registry.register(AgentDefinition(
+        id=AGENT_ID,
+        display_name="HSK 3.0 中文陪练",
+        description=_DESCRIPTION,
+        request_model=TutorChatRequest,
+        response_model=TutorChatResponse,
+        capabilities=[AgentCapability.CHAT, AgentCapability.STREAMING],
+        runner=_runner,
+        mcp_tool_names=[],
+        skills=[],
+        cli_help="HSK 3.0 对话陪练（交互模式；--once -m 单轮）",
+        http_path_prefix="/v1/hsk30-tutor",
+        cli_subparser_factory=lambda sub: __import__(
+            "agent_platform.agents.hsk30_tutor.cli", fromlist=["register_subparser"]
+        ).register_subparser(sub),
+        cli_run_handler=lambda args, settings, parser: __import__(
+            "agent_platform.agents.hsk30_tutor.cli", fromlist=["run"]
+        ).run(args, settings, parser),
+        http_router_factories=[lambda: [__import__(
+            "agent_platform.agents.hsk30_tutor.http_routes", fromlist=["router"]
+        ).router]],
+    ))
     logger.debug("registered agent id=%s", AGENT_ID)
 
 

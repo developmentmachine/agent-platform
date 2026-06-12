@@ -2,6 +2,10 @@
 
 来源：《中文水平考试 HSK 考试大纲》中外语言交流合作中心 2025-11 发布。
 包含：任务大纲、语法大纲、话题大纲、词汇表、认读字表、书写字表。
+
+重构要点：
+- _syllabus_field 装饰器消除 5 个结构相同的 getter 函数
+- LevelSyllabus dataclass 保持不可变（frozen=True）
 """
 from __future__ import annotations
 
@@ -9,36 +13,31 @@ import json
 from dataclasses import dataclass
 from functools import lru_cache
 from importlib import resources
-from typing import Dict, FrozenSet, List, Optional, Set
+from typing import Callable, Dict, FrozenSet, TypeVar
 
 from agent_platform.agents import hsk30_tutor as _pkg
+
+T = TypeVar("T")
 
 
 @dataclass(frozen=True)
 class LevelSyllabus:
     """单个等级的考纲数据。"""
-
     level: int
     stage: str              # 初等 / 中等 / 高等
     band: str               # e.g. "Level 1", "Level 7–9"
     tasks: str              # 任务大纲原文
     grammar: str            # 语法大纲原文
     topics: str = ""        # 话题大纲原文
-    vocabulary: tuple = ()  # 本级词汇 tuple[str, ...]
+    vocabulary: tuple = ()  # 累积词汇 tuple[str, ...]
     char_recognition: frozenset = frozenset()  # 累积认读字
     char_writing: frozenset = frozenset()      # 累积书写字
 
 
 _STAGE_MAP = {
-    1: ("初等", "Level 1"),
-    2: ("初等", "Level 2"),
-    3: ("初等", "Level 3"),
-    4: ("中等", "Level 4"),
-    5: ("中等", "Level 5"),
-    6: ("中等", "Level 6"),
-    7: ("高等", "Level 7–9"),
-    8: ("高等", "Level 7–9"),
-    9: ("高等", "Level 7–9"),
+    1: ("初等", "Level 1"), 2: ("初等", "Level 2"), 3: ("初等", "Level 3"),
+    4: ("中等", "Level 4"), 5: ("中等", "Level 5"), 6: ("中等", "Level 6"),
+    7: ("高等", "Level 7–9"), 8: ("高等", "Level 7–9"), 9: ("高等", "Level 7–9"),
 }
 
 
@@ -52,44 +51,29 @@ def _build_syllabus() -> Dict[int, LevelSyllabus]:
     raw = _load_raw()
     result: Dict[int, LevelSyllabus] = {}
 
-    # Build cumulative vocabulary per level
-    cumulative_vocab: Dict[int, List[str]] = {}
+    # 构建累积词汇
+    cumulative_vocab: Dict[int, set] = {}
     for level in range(1, 10):
         key = "7-9" if level >= 7 else str(level)
-        vocab = raw.get("vocabulary", {}).get(key, [])
-        prev_level = level - 1 if level > 1 else None
-        prev_vocab = set(cumulative_vocab.get(prev_level, [])) if prev_level else set()
-        cumulative_vocab[level] = sorted(prev_vocab | set(vocab))
+        prev = cumulative_vocab.get(level - 1, set()) if level > 1 else set()
+        cumulative_vocab[level] = prev | set(raw.get("vocabulary", {}).get(key, []))
 
-    # Character recognition - cumulative from raw data
     raw_recog = raw.get("char_recognition_cumulative", {})
     raw_write = raw.get("char_writing_cumulative", {})
 
     for level in range(1, 10):
         key = "7-9" if level >= 7 else str(level)
         stage, band = _STAGE_MAP[level]
-
-        # Map level to cumulative key
-        recog_key = key
-        recog_chars = frozenset(raw_recog.get(recog_key, []))
-
-        # Writing: levels 1-2 share a group
-        if level <= 2:
-            write_key = "1-2"
-        else:
-            write_key = key
-        write_chars = frozenset(raw_write.get(write_key, []))
+        write_key = "1-2" if level <= 2 else key
 
         result[level] = LevelSyllabus(
-            level=level,
-            stage=stage,
-            band=band,
+            level=level, stage=stage, band=band,
             tasks=raw.get("tasks", {}).get(key, ""),
             grammar=raw.get("grammar", {}).get(key, ""),
             topics=raw.get("topics", {}).get(key, ""),
-            vocabulary=tuple(cumulative_vocab.get(level, [])),
-            char_recognition=recog_chars,
-            char_writing=write_chars,
+            vocabulary=tuple(sorted(cumulative_vocab[level])),
+            char_recognition=frozenset(raw_recog.get(key, [])),
+            char_writing=frozenset(raw_write.get(write_key, [])),
         )
     return result
 
@@ -104,26 +88,42 @@ def get_syllabus(level: int) -> LevelSyllabus:
     return SYLLABUS[level]
 
 
-def get_tasks(level: int) -> str:
+def _syllabus_field(fn: Callable[[LevelSyllabus], T]) -> Callable[[int], T]:
+    """装饰器：将 get_xxx(syllabus) → get_xxx(level) 的样板 getter 简化为一行。"""
+    @lru_cache(maxsize=9)
+    def getter(level: int) -> T:
+        return fn(get_syllabus(level))
+    getter.__name__ = fn.__name__
+    getter.__qualname__ = fn.__qualname__
+    getter.__doc__ = fn.__doc__
+    return getter
+
+
+@_syllabus_field
+def get_tasks(s: LevelSyllabus) -> str:
     """获取指定等级的任务大纲。"""
-    return get_syllabus(level).tasks
+    return s.tasks
 
 
-def get_grammar(level: int) -> str:
+@_syllabus_field
+def get_grammar(s: LevelSyllabus) -> str:
     """获取指定等级的语法大纲。"""
-    return get_syllabus(level).grammar
+    return s.grammar
 
 
-def get_vocabulary(level: int) -> tuple[str, ...]:
+@_syllabus_field
+def get_vocabulary(s: LevelSyllabus) -> tuple[str, ...]:
     """获取指定等级的累积词汇表（含 1..level 所有词汇）。"""
-    return get_syllabus(level).vocabulary
+    return s.vocabulary
 
 
-def get_recognition_chars(level: int) -> frozenset[str]:
+@_syllabus_field
+def get_recognition_chars(s: LevelSyllabus) -> frozenset[str]:
     """获取指定等级的累积认读字集。"""
-    return get_syllabus(level).char_recognition
+    return s.char_recognition
 
 
-def get_writing_chars(level: int) -> frozenset[str]:
+@_syllabus_field
+def get_writing_chars(s: LevelSyllabus) -> frozenset[str]:
     """获取指定等级的累积书写字集。"""
-    return get_syllabus(level).char_writing
+    return s.char_writing

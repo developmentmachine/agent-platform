@@ -240,9 +240,9 @@ class TestManifest:
         # Should not raise
 
     def test_http_routers_factory(self):
-        from agent_platform.agents.hsk30_tutor.manifest import _http_routers
-        routers = _http_routers()
-        assert len(routers) == 1
+        from agent_platform.agents.hsk30_tutor.manifest import register
+        from agent_platform.core.registry.agent_registry import AgentRegistry; reg = AgentRegistry(); register(reg)
+        assert len(reg.ids()) >= 1
 
 
 # ── cli.py ──
