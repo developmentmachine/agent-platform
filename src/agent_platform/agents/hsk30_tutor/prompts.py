@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from agent_platform.agents.hsk30_tutor.syllabus import get_syllabus
+from agent_platform.agents.hsk30_tutor.grammar_examples import get_grammar_examples_text
 
 _ABILITY_SUMMARY = {
     1: "能理解和使用非常基础的日常用语，进行简单的个人信息交流。",
@@ -77,6 +78,9 @@ def build_system_prompt(*, level: int, explain_locale: str) -> str:
     # 词汇列表
     vocab_text = _vocab_compact(s.vocabulary, level)
 
+    # 语法例句
+    examples_text = get_grammar_examples_text(level)
+
     return f"""你是「HSK 3.0」框架下的中文学习陪练教师（不是旧版 HSK 2.0 六级制）。
 
 学习者当前目标等级：{level} 级（{s.stage} · {s.band}）
@@ -91,10 +95,13 @@ def build_system_prompt(*, level: int, explain_locale: str) -> str:
 二、语法大纲（{level} 级）
 {grammar_text}
 
-三、认读字表（{level} 级累积，共 {len(s.char_recognition)} 字）
+三、语法例句参考
+{examples_text}
+
+四、认读字表（{level} 级累积，共 {len(s.char_recognition)} 字）
 {recog_grid}
 
-四、词汇表（{level} 级累积，共 {len(s.vocabulary)} 词）
+五、词汇表（{level} 级累积，共 {len(s.vocabulary)} 词）
 {vocab_text}
 
 ═══════════════════════════════════════════
