@@ -19,9 +19,9 @@
 | ID | 包路径 | 能力概要 |
 |----|--------|----------|
 | `stock-recap` | `agents/stock_recap/` | 报告、NDJSON 流、定时任务、MCP 工具、Skills |
-| `hsk30-tutor` | `agents/hsk30_tutor/` | HSK 3.0 多轮对话陪练（CHAT） |
+| `hsk30-tutor` | `agents/hsk30_tutor/` | HSK 3.0 多轮对话陪练（CHAT）、字词约束验证、自动重试修正、流式输出 |
 
-`stock-recap` 是第一个完整验证平台契约的 Agent；`hsk30-tutor`（W17）验证第二 Agent 的 CLI/HTTP 自动装配与业务隔离。
+`stock-recap` 是第一个完整验证平台契约的 Agent；`hsk30-tutor`（W17+）验证第二 Agent 的 CLI/HTTP 自动装配与业务隔离，并展示了**纯业务 Agent**的最佳实践（只依赖 `core.*`，不碰 `infra.*`）。
 
 ---
 
@@ -106,13 +106,24 @@ core             ↛ 任何上层
 
 | 扩展点 | 怎么做 | 例子 |
 |--------|--------|------|
-| **新 Agent** | 新建 `agents/<id>/manifest.py`，导出 `register(reg)`；可选 entry_point | `stock-recap` |
+| **新 Agent** | 新建 `agents/<id>/manifest.py`，导出 `register(reg)`；可选 entry_point | `stock-recap`、`hsk30-tutor` |
 | **新 LLM 后端** | 实现 `LlmBackendPort`，在 `infra/llm/providers` 注册 | `openai` / `ollama` |
 | **新工具** | `tools_server/tools/` 登记 SPEC；进入全局 MCP 池 | `web_search` |
 | **新接入入口** | 在 `adapters/<x>/` 实现 connector，统一调 `runtime.run(...)` | `wecom` / `qq` |
 | **新 Renderer** | 实现 `RendererPort`，在 Agent manifest 中声明 | `wechat_text` |
 | **新 Skill** | `SKILL.md` 的 `name` 为 id；`manifest.json` 只写 `path`；entry_point + `with_skill_bundle` | stock-recap bundle |
 | **新副作用** | Agent 在注册时通过 `SideEffectBus.subscribe(event, handler)` | `evolution` / `push` |
+| **选择性部署** | 设置 `AGENTS_ENABLED` 环境变量（逗号分隔 Agent ID），`_register_builtin_agents` 按需注册 | `AGENTS_ENABLED=hsk30-tutor` |
+
+> **选择性部署示例：**
+> ```bash
+> # 只部署 hsk30-tutor
+> AGENTS_ENABLED=hsk30-tutor uv run agent-platform stock-recap --serve
+> # 只部署 stock-recap
+> AGENTS_ENABLED=stock-recap uv run agent-platform stock-recap --serve
+> # 全部部署（默认）
+> uv run agent-platform stock-recap --serve
+> ```
 
 ---
 

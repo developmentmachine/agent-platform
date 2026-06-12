@@ -102,7 +102,15 @@ uv run agent-platform stock-recap --once --mode daily --provider mock --no-write
 
 ---
 
-### hsk30-tutor：中文陪练
+### hsk30-tutor：HSK 3.0 中文陪练
+
+基于 HSK 3.0（2026-07 实施版）三阶段九级体系的中文对话陪练 Agent。
+
+**核心特性：**
+- 9 级全覆盖：认读字 3,086 / 书写字 866 / 词汇 10,370 / 任务大纲 / 话题大纲 / 语法大纲
+- 三层字词约束：system prompt 注入 → 累积制 → 输出验证 + 自动重试修正
+- 专有名词豁免：人名、地名用字不计入超纲（符合 HSK 大纲"词汇表不收录专有名词"）
+- 流式输出：NDJSON 流 + 流结束后自动验证
 
 ```bash
 # 交互 REPL（默认）
@@ -118,7 +126,11 @@ REPL 内命令：`/level 1-9`、`/locale zh|en|both`、`/clear`、`/help`、`/qu
 
 需配置 `OPENAI_API_KEY`（及可选 `RECAP_MODEL`）方可调用真实 LLM；否则为 stub 占位回复。
 
-考纲数据占位目录：`src/agent_platform/resources/hsk30/`（见该目录 README）。
+考纲数据：`src/agent_platform/resources/hsk30/`（见该目录 README）。
+
+**架构：** `models` → `syllabus` → `validation` → `prompts` → `llm_client` → `use_case` → `manifest` / `http_routes` / `cli`。Agent 内部零环形依赖，只依赖平台 `core.*` 层。
+
+**覆盖率：** 91%（4 个测试文件，80 个测试用例）。
 
 ---
 

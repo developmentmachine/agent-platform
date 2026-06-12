@@ -40,9 +40,11 @@
 | Agent | 目录 | 能力 | 要点 |
 |-------|------|------|------|
 | `stock-recap` | `agents/stock_recap/` | REPORT, STREAMING, SCHEDULED, TOOL_USING | Phase pipeline、skills、MCP 工具名、定时任务 |
-| `hsk30-tutor` | `agents/hsk30_tutor/` | CHAT | 轻量 `chat_completion`、交互 REPL、`POST /v1/hsk30-tutor/chat` |
+| `hsk30-tutor` | `agents/hsk30_tutor/` | CHAT, STREAMING | 轻量 `chat_completion`、字词约束验证、自动重试修正、装饰器模式、交互 REPL、`POST /v1/hsk30-tutor/chat` |
 
 阅读顺序：`manifest.py` → `use_case.py`（或 `pipeline_v2.py`）→ `cli.py` → `http_routes.py`。
+
+> **hsk30-tutor 是纯业务 Agent 的最佳参考**：只依赖 `core.*` + `config.*`，不碰 `infra.*`；内部依赖图是干净的 DAG（无环）；使用装饰器消除模板代码。
 
 ---
 
@@ -78,21 +80,46 @@ def register(registry: AgentRegistry) -> None:
             mcp_tool_names=[],  # 无工具
             cli_help="一句话 help",
             http_path_prefix="/v1/my-agent",
-            cli_subparser_factory=_cli_subparser,
-            cli_run_handler=_cli_run,
-            http_router_factories=[lambda: [my_router]],
+            # 懒加载 CLI/HTTP，避免 manifest.py 导入业务模块
+            cli_subparser_factory=lambda sub: __import__(
+                "my_agent.cli", fromlist=["register_subparser"]
+            ).register_subparser(sub),
+            cli_run_handler=lambda args, s, p: __import__(
+                "my_agent.cli", fromlist=["run"]
+            ).run(args, s, p),
+            http_router_factories=[lambda: [__import__(
+                "my_agent.http_routes", fromlist=["router"]
+            ).router]],
         )
     )
 ```
 
-`use_case` 入口须激活 `AgentScope`（`AgentRuntime.run` 已内置；直连 `use_case` 时自行包一层）：
+`use_case` 入口须激活 `AgentScope`（推荐用装饰器消除模板代码）：
 
 ```python
 from agent_platform.runtime.scope import agent_execution
 
+# 方式一：上下文管理器
 def chat_turn(req, settings, *, ctx=None):
-    with agent_execution(_definition_for_registry()):  # 或缓存 manifest 里的 AgentDefinition
+    with agent_execution(_definition_for_registry()):
         ...
+
+# 方式二：装饰器（推荐，见 hsk30-tutor 实现）
+def _with_agent_scope(fn):
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        scope = AgentScope(agent_id=AGENT_ID, ...)
+        token = current_agent_scope.set(scope)
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            current_agent_scope.reset(token)
+    return wrapper
+
+@_with_agent_scope
+def chat_turn(req, settings, *, ctx=None):
+    # 直接写业务逻辑，不需要手动管理 scope
+    ...
 ```
 
 ### 3.2 带 MCP + Skill bundle（报告 / 工具型）
@@ -262,8 +289,12 @@ reg.register(
 | 类型 | 建议 |
 |------|------|
 | 单元 | `tests/test_<agent>_*.py`，mock LLM / 数据源 |
+| 数据完整性 | 验证累积性、数据规模、边界条件（见 `test_hsk30_tutor_units.py`） |
+| 验证逻辑 | 测试超纲检测、专有名词豁免、分词（见 `test_hsk30_tutor_units.py`） |
+| 重试机制 | mock LLM 返回，验证重试次数和覆盖率提升（见 `test_hsk30_tutor_retry.py`） |
 | CLI | 断言 `register_subparser` 参数；`--once` + mock 返回码 0 |
 | HTTP | `TestClient` 调 `/v1/<prefix>/...` |
+| 覆盖率 | `pytest --cov=agent_platform.agents.<id>` — hsk30-tutor 达 91% |
 
 ---
 
@@ -276,7 +307,40 @@ reg.register(
 
 ---
 
-## 九、文件清单示例（`news-digest`）
+## 九、文件清单示例
+
+### 9.1 纯对话 Agent（`hsk30-tutor` 模式）
+
+```
+新增：
+  src/agent_platform/agents/my_agent/
+    __init__.py          ← AGENT_ID 常量
+    models.py            ← Pydantic 请求/响应模型
+    syllabus.py          ← 数据加载（leaf，无外部依赖）
+    validation.py        ← 输出验证（依赖 syllabus）
+    prompts.py           ← Prompt 构建（依赖 syllabus + 语法例句）
+    llm_client.py        ← LLM 调用 + 重试 + client 缓存（leaf）
+    use_case.py          ← 业务编排（@_with_agent_scope 装饰器）
+    manifest.py          ← AgentDefinition 注册（lambda 懒加载 CLI/HTTP）
+    http_routes.py       ← FastAPI APIRouter
+    cli.py               ← CLI 子命令（register_subparser + run）
+  tests/
+    test_my_agent.py           ← 基础集成测试
+    test_my_agent_units.py     ← 单元测试（数据/验证/prompt）
+    test_my_agent_retry.py     ← 重试机制测试
+    test_my_agent_coverage.py  ← 覆盖率补充测试
+
+修改：
+  src/agent_platform/runtime/factory.py   # register_builtin_agents 加一行
+```
+
+> **设计要点：**
+> - 内部依赖图是 DAG（无环）：`models` ← `syllabus` ← `validation` ← `prompts` ← `use_case`
+> - `llm_client.py` 是 leaf（只依赖 `config.settings`）
+> - `manifest.py` 使用 lambda 懒加载 CLI/HTTP，避免注册时导入业务模块
+> - `use_case.py` 使用 `@_with_agent_scope` 装饰器消除 AgentScope 模板代码
+
+### 9.2 带 MCP + Skill bundle（`news-digest`）
 
 ```
 新增：
