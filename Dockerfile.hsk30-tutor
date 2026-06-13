@@ -1,0 +1,23 @@
+FROM agent-platform:local
+
+USER root
+
+# 更新所有 workspace packages
+COPY --chown=app:app packages/ /app/packages/
+COPY --chown=app:app src/ /app/src/
+
+# 重新安装 workspace packages（增量更新）
+RUN uv pip install --system --no-cache \
+    -e packages/core \
+    -e packages/infra \
+    -e packages/hsk30-tutor \
+    -e .
+
+USER app
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"
+
+CMD ["uvicorn", "agent_platform.adapters.http.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]

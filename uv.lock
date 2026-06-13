@@ -17,11 +17,22 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 
+[manifest]
+members = [
+    "agent-platform",
+    "agent-platform-core",
+    "agent-platform-hsk30-tutor",
+    "agent-platform-infra",
+    "agent-platform-stock-recap",
+]
+
 [[package]]
 name = "agent-platform"
 version = "1.0.0"
 source = { editable = "." }
 dependencies = [
+    { name = "agent-platform-core" },
+    { name = "agent-platform-infra" },
     { name = "akshare" },
     { name = "apscheduler" },
     { name = "cryptography" },
@@ -59,6 +70,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "agent-platform-core", editable = "packages/core" },
+    { name = "agent-platform-infra", editable = "packages/infra" },
     { name = "akshare" },
     { name = "apscheduler", specifier = ">=3.10.0" },
     { name = "cryptography", specifier = ">=46.0.7" },
@@ -89,6 +102,101 @@ dev = [
     { name = "import-linter", specifier = ">=2.0" },
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-cov", specifier = ">=5.0.0" },
+]
+
+[[package]]
+name = "agent-platform-core"
+version = "0.1.0"
+source = { editable = "packages/core" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.110.0" },
+    { name = "pydantic", specifier = ">=2.7.0" },
+    { name = "pydantic-settings", specifier = ">=2.0.0" },
+]
+
+[[package]]
+name = "agent-platform-hsk30-tutor"
+version = "0.1.0"
+source = { editable = "packages/hsk30-tutor" }
+dependencies = [
+    { name = "agent-platform-core" },
+    { name = "agent-platform-infra" },
+    { name = "fastapi" },
+    { name = "openai" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "agent-platform-core", editable = "packages/core" },
+    { name = "agent-platform-infra", editable = "packages/infra" },
+    { name = "fastapi", specifier = ">=0.110.0" },
+    { name = "openai", specifier = ">=1.40.0" },
+]
+
+[[package]]
+name = "agent-platform-infra"
+version = "0.1.0"
+source = { editable = "packages/infra" }
+dependencies = [
+    { name = "agent-platform-core" },
+    { name = "httpx" },
+    { name = "openai" },
+    { name = "pyyaml" },
+    { name = "tenacity" },
+]
+
+[package.optional-dependencies]
+all = [
+    { name = "qdrant-client" },
+]
+qdrant = [
+    { name = "qdrant-client" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "agent-platform-core", editable = "packages/core" },
+    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "openai", specifier = ">=1.40.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "qdrant-client", marker = "extra == 'all'", specifier = ">=1.11.0" },
+    { name = "qdrant-client", marker = "extra == 'qdrant'", specifier = ">=1.11.0" },
+    { name = "tenacity", specifier = ">=8.3.0" },
+]
+provides-extras = ["sqlite", "qdrant", "all"]
+
+[[package]]
+name = "agent-platform-stock-recap"
+version = "0.1.0"
+source = { editable = "packages/stock-recap" }
+dependencies = [
+    { name = "agent-platform-core" },
+    { name = "agent-platform-infra" },
+    { name = "akshare" },
+    { name = "httpx" },
+    { name = "openai" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "tenacity" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "agent-platform-core", editable = "packages/core" },
+    { name = "agent-platform-infra", editable = "packages/infra" },
+    { name = "akshare" },
+    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "openai", specifier = ">=1.40.0" },
+    { name = "pydantic", specifier = ">=2.7.0" },
+    { name = "pydantic-settings", specifier = ">=2.0.0" },
+    { name = "tenacity", specifier = ">=8.3.0" },
 ]
 
 [[package]]

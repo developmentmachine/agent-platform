@@ -37,11 +37,12 @@ class PrincipalContext:
     role: str = "user"
     api_key_hash: Optional[str] = None
     source: Optional[str] = None
+    subject: Optional[str] = None
 
     @staticmethod
     def system() -> "PrincipalContext":
         """系统级身份：内部任务（outbox sweep / scheduled job）使用，绕过 RBAC。"""
-        return PrincipalContext(tenant_id=None, role="admin", api_key_hash="system")
+        return PrincipalContext(tenant_id=None, role="admin", api_key_hash="system", subject="system")
 
     @staticmethod
     def anonymous() -> "PrincipalContext":
