@@ -17,6 +17,20 @@ class StreamEventKind(str, Enum):
     ERROR = "error"
     COMPLETED = "completed"
 
+    # ReAct events
+    REACT_START = "react_start"
+    REACT_THOUGHT_START = "react_thought_start"
+    REACT_THOUGHT_END = "react_thought_end"
+    REACT_ACTION = "react_action"
+    REACT_OBSERVATION = "react_observation"
+    REACT_ANSWER = "react_answer"
+
+    # Plan-and-Execute events
+    PLAN_GENERATED = "plan_generated"
+    SUBGOAL_START = "subgoal_start"
+    SUBGOAL_DONE = "subgoal_done"
+    REPLAN = "replan"
+
 
 @dataclass
 class StreamEvent:
