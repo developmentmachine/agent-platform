@@ -1,7 +1,15 @@
-"""HSK 3.0 教师 system prompt — 接入考纲数据，严格遵循三阶段九级标准。"""
+"""HSK 3.0 教师 system prompt — 支持 RAG 动态检索注入。
+
+重构要点：
+- build_system_prompt 接受可选 query 参数启用 RAG 检索
+- 无 query 时保持原有全量注入行为（向后兼容）
+- 有 query 时只注入检索到的相关考纲片段 + 全量词汇/字表（验证需要）
+- _compact_tasks 装饰器消除重复的压缩逻辑
+"""
 from __future__ import annotations
 
 import re
+from typing import Optional
 
 from agent_platform.agents.hsk30_tutor.syllabus import get_syllabus
 from agent_platform.agents.hsk30_tutor.grammar_examples import get_grammar_examples_text
@@ -42,11 +50,8 @@ def _char_grid(chars: frozenset[str], per_line: int = 40) -> str:
 
 def _compact_tasks(raw: str) -> str:
     """压缩任务大纲格式：去掉多余空行和页码。"""
-    # 去掉页码标记（行内只有纯数字的行）
     text = re.sub(r"^\d+\s*$", "", raw, flags=re.MULTILINE)
-    # 压缩连续空行
     text = re.sub(r"\n{3,}", "\n\n", text)
-    # 去掉行首的换行（bullet 格式）
     text = re.sub(r"\n(?=[一二三四五六七八九十]、)", "\n", text)
     return text.strip()
 
@@ -68,37 +73,52 @@ def _vocab_compact(vocab: frozenset[str]) -> str:
     return result
 
 
-def build_system_prompt(*, level: int, explain_locale: str) -> str:
+def build_system_prompt(
+    *,
+    level: int,
+    explain_locale: str,
+    query: Optional[str] = None,
+) -> str:
+    """构建 system prompt。
+
+    Args:
+        level: HSK 等级 1-9
+        explain_locale: 讲解语言 "zh" | "en" | "both"
+        query: 用户消息（启用 RAG 检索）。为 None 时全量注入（向后兼容）。
+    """
     loc = _LOCALE_HINT.get(explain_locale, _LOCALE_HINT["both"])
     s = get_syllabus(level)
 
-    # 全量任务大纲（压缩格式）
-    tasks_text = _compact_tasks(s.tasks)
-
-    # 语法大纲（全量）
-    grammar_text = s.grammar.strip()
-
-    # 认读字网格
+    # ── 认读字网格（全量，验证需要）──
     recog_grid = _char_grid(s.char_recognition)
 
-    # 词汇列表
+    # ── 词汇列表（全量，验证需要）──
     vocab_text = _vocab_compact(s.vocabulary)
 
-    # 语法例句
-    examples_text = get_grammar_examples_text(level)
+    # ── 任务/语法/话题/例句（RAG 或全量）──
+    if query is not None:
+        # RAG 模式：检索相关内容
+        from agent_platform.agents.hsk30_tutor.rag import retrieve_syllabus
+        rag_content = retrieve_syllabus(query, level, top_k=8)
 
-    # 话题大纲
-    topics_text = s.topics.strip() if s.topics else ""
+        # 语法例句（全量，体积小）
+        examples_text = get_grammar_examples_text(level)
 
-    return f"""你是「HSK 3.0」框架下的中文学习陪练教师（不是旧版 HSK 2.0 六级制）。
+        # 组装
+        syllabus_section = f"""【考纲相关内容 — 根据你的问题检索】
+{rag_content}
 
-学习者当前目标等级：{level} 级（{s.stage} · {s.band}）
+【语法例句参考】
+{examples_text}"""
+        token_note = "（以上为 RAG 检索的相关考纲内容，完整考纲约 14,800 tokens 已压缩）"
+    else:
+        # 全量模式（向后兼容）
+        tasks_text = _compact_tasks(s.tasks)
+        grammar_text = s.grammar.strip()
+        topics_text = s.topics.strip() if s.topics else ""
+        examples_text = get_grammar_examples_text(level)
 
-═══════════════════════════════════════════
-【考纲约束 — 必须严格遵守】
-═══════════════════════════════════════════
-
-一、任务大纲（{level} 级，{len(tasks_text)} 字）
+        syllabus_section = f"""一、任务大纲（{level} 级，{len(tasks_text)} 字）
 {tasks_text}
 
 二、话题大纲（{level} 级）
@@ -108,13 +128,25 @@ def build_system_prompt(*, level: int, explain_locale: str) -> str:
 {grammar_text}
 
 四、语法例句参考
-{examples_text}
+{examples_text}"""
+        token_note = ""
+
+    return f"""你是「HSK 3.0」框架下的中文学习陪练教师（不是旧版 HSK 2.0 六级制）。
+
+学习者当前目标等级：{level} 级（{s.stage} · {s.band}）
+
+═══════════════════════════════════════════
+【考纲约束 — 必须严格遵守】
+═══════════════════════════════════════════
+
+{syllabus_section}
 
 五、认读字表（{level} 级累积，共 {len(s.char_recognition)} 字）
 {recog_grid}
 
 六、词汇表（{level} 级累积，共 {len(s.vocabulary)} 词）
 {vocab_text}
+{token_note}
 
 ═══════════════════════════════════════════
 【教学规则】

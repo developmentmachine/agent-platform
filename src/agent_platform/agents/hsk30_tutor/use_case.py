@@ -26,9 +26,17 @@ _MAX_CORRECTION_ATTEMPTS = 2
 # ── 内部工具 ─────────────────────────────────────────────────
 
 def _build_messages(req: TutorChatRequest) -> List[Dict[str, str]]:
-    """组装 system + history + user 消息列表。"""
+    """组装 system + history + user 消息列表。
+
+    使用 RAG 检索：将用户消息传给 build_system_prompt，只注入相关考纲片段。
+    """
+    system_prompt = build_system_prompt(
+        level=req.level,
+        explain_locale=req.explain_locale,
+        query=req.message,  # RAG: 根据用户消息检索相关考纲
+    )
     return [
-        {"role": "system", "content": build_system_prompt(level=req.level, explain_locale=req.explain_locale)},
+        {"role": "system", "content": system_prompt},
         *({"role": t.role, "content": t.content} for t in req.history),
         {"role": "user", "content": req.message},
     ]
