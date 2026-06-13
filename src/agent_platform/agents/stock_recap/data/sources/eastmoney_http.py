@@ -16,6 +16,7 @@ import time
 from typing import Any, Dict, Iterable, List, Optional
 
 import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger("agent_platform.sources.eastmoney")
 
@@ -105,23 +106,29 @@ def push2_clist(
         params.update(extra_params)
 
     client = _get_client()
+
+    @retry(
+        stop=stop_after_attempt(retries_per_host),
+        wait=wait_exponential(multiplier=sleep_base, min=sleep_base, max=10),
+        reraise=True,
+    )
+    def _fetch_host(url: str) -> List[Dict[str, Any]]:
+        _throttle()
+        r = client.get(url, params=params, timeout=timeout)
+        r.raise_for_status()
+        js = r.json()
+        return list(((js.get("data") or {}).get("diff")) or [])
+
     last_err: Optional[Exception] = None
     for host in _ordered_hosts(hosts):
         url = f"https://{host}.push2.eastmoney.com/api/qt/clist/get"
-        for attempt in range(retries_per_host):
-            _throttle()
-            try:
-                r = client.get(url, params=params, timeout=timeout)
-                r.raise_for_status()
-                js = r.json()
-                diff = ((js.get("data") or {}).get("diff")) or []
-                _mark_success(host)
-                return list(diff)
-            except Exception as e:  # noqa: BLE001
-                last_err = e
-                if attempt + 1 < retries_per_host:
-                    time.sleep(sleep_base * (attempt + 1))
-        logger.debug("eastmoney_push2 host=%s 全部重试失败：%s", host, last_err)
+        try:
+            result = _fetch_host(url)
+            _mark_success(host)
+            return result
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            logger.debug("eastmoney_push2 host=%s 全部重试失败：%s", host, last_err)
 
     logger.warning("eastmoney_push2 全部 host 失败：fs=%s err=%s", fs, last_err)
     return []
@@ -139,19 +146,23 @@ def push2ex_zt_pool(date_yyyymmdd: str, *, pagesize: int = 100) -> List[Dict[str
         "date": date_yyyymmdd,
     }
     client = _get_client()
-    last_err: Optional[Exception] = None
-    for attempt in range(2):
+
+    @retry(
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=0.5, min=0.5, max=5),
+        reraise=True,
+    )
+    def _fetch() -> List[Dict[str, Any]]:
         _throttle()
-        try:
-            r = client.get(url, params=params, timeout=_TIMEOUT_S)
-            r.raise_for_status()
-            pool = ((r.json().get("data") or {}).get("pool")) or []
-            return list(pool)
-        except Exception as e:  # noqa: BLE001
-            last_err = e
-            time.sleep(0.5 * (attempt + 1))
-    logger.warning("push2ex_zt_pool 失败：date=%s err=%s", date_yyyymmdd, last_err)
-    return []
+        r = client.get(url, params=params, timeout=_TIMEOUT_S)
+        r.raise_for_status()
+        return list(((r.json().get("data") or {}).get("pool")) or [])
+
+    try:
+        return _fetch()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("push2ex_zt_pool 失败：date=%s err=%s", date_yyyymmdd, e)
+        return []
 
 
 def shutdown_client() -> None:

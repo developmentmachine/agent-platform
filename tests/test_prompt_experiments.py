@@ -32,19 +32,6 @@ from agent_platform.infra.persistence.db import (
 _noop_guardrail = GuardrailAdapter
 
 
-def _settings_via_env(tmp_path, monkeypatch) -> Settings:
-    db = tmp_path / "exp.db"
-    monkeypatch.setenv("RECAP_DB_PATH", str(db))
-    monkeypatch.setenv("RECAP_WXWORK_WEBHOOK_URL", "http://example.invalid/hook")
-    monkeypatch.setenv("RECAP_PUSH_ENABLED", "false")
-    monkeypatch.setenv("RECAP_API_KEY", "test-key")
-    monkeypatch.setenv("RECAP_AUDIT_ENABLED", "true")
-    import agent_platform.config.settings as _settings_mod
-
-    _settings_mod._settings_instance = None  # noqa: SLF001
-    return Settings()
-
-
 def _seed_experiment(
     db_path: str,
     *,
@@ -78,15 +65,15 @@ def _seed_experiment(
 # ─── 1. select_variant：稳定性 + 加权分布 ─────────────────────────────
 
 
-def test_select_variant_returns_none_when_no_experiment(tmp_path, monkeypatch):
-    settings = _settings_via_env(tmp_path, monkeypatch)
+def test_select_variant_returns_none_when_no_experiment(fresh_settings):
+    settings = fresh_settings
     init_db(settings.db_path)
     rf = SqliteRepositoryFactory(settings.db_path)
     assert select_variant(rf, mode="daily", stickiness_key="abc") is None
 
 
-def test_select_variant_returns_none_when_no_stickiness_key(tmp_path, monkeypatch):
-    settings = _settings_via_env(tmp_path, monkeypatch)
+def test_select_variant_returns_none_when_no_stickiness_key(fresh_settings):
+    settings = fresh_settings
     init_db(settings.db_path)
     _seed_experiment(
         settings.db_path,
@@ -99,8 +86,8 @@ def test_select_variant_returns_none_when_no_stickiness_key(tmp_path, monkeypatc
     assert select_variant(rf, mode="daily", stickiness_key="") is None
 
 
-def test_select_variant_is_deterministic(tmp_path, monkeypatch):
-    settings = _settings_via_env(tmp_path, monkeypatch)
+def test_select_variant_is_deterministic(fresh_settings):
+    settings = fresh_settings
     init_db(settings.db_path)
     _seed_experiment(
         settings.db_path,
@@ -116,9 +103,9 @@ def test_select_variant_is_deterministic(tmp_path, monkeypatch):
     assert a1.prompt_version == a2.prompt_version
 
 
-def test_select_variant_weight_distribution(tmp_path, monkeypatch):
+def test_select_variant_weight_distribution(fresh_settings):
     """权重 1:9 时，10000 个随机 key 中 B 占比应 > 80%。"""
-    settings = _settings_via_env(tmp_path, monkeypatch)
+    settings = fresh_settings
     init_db(settings.db_path)
     _seed_experiment(
         settings.db_path,
@@ -140,8 +127,8 @@ def test_select_variant_weight_distribution(tmp_path, monkeypatch):
     assert 0.80 < ratio_b < 0.95, f"B ratio out of band: {ratio_b}"
 
 
-def test_select_variant_zero_weight_excluded(tmp_path, monkeypatch):
-    settings = _settings_via_env(tmp_path, monkeypatch)
+def test_select_variant_zero_weight_excluded(fresh_settings):
+    settings = fresh_settings
     init_db(settings.db_path)
     _seed_experiment(
         settings.db_path,
@@ -159,8 +146,8 @@ def test_select_variant_zero_weight_excluded(tmp_path, monkeypatch):
         assert a.variant_id == "A"
 
 
-def test_select_variant_paused_experiment_ignored(tmp_path, monkeypatch):
-    settings = _settings_via_env(tmp_path, monkeypatch)
+def test_select_variant_paused_experiment_ignored(fresh_settings):
+    settings = fresh_settings
     init_db(settings.db_path)
     _seed_experiment(
         settings.db_path,
@@ -178,8 +165,8 @@ def test_select_variant_paused_experiment_ignored(tmp_path, monkeypatch):
 # ─── 2. CRUD 函数 ───────────────────────────────────────────────────────
 
 
-def test_load_active_experiment_picks_latest_starts_at(tmp_path, monkeypatch):
-    settings = _settings_via_env(tmp_path, monkeypatch)
+def test_load_active_experiment_picks_latest_starts_at(fresh_settings):
+    settings = fresh_settings
     init_db(settings.db_path)
 
     upsert_prompt_experiment(
@@ -203,8 +190,8 @@ def test_load_active_experiment_picks_latest_starts_at(tmp_path, monkeypatch):
     assert active["experiment_id"] == "new"
 
 
-def test_list_prompt_experiments_filters(tmp_path, monkeypatch):
-    settings = _settings_via_env(tmp_path, monkeypatch)
+def test_list_prompt_experiments_filters(fresh_settings):
+    settings = fresh_settings
     init_db(settings.db_path)
     _seed_experiment(
         settings.db_path,
@@ -227,15 +214,8 @@ def test_list_prompt_experiments_filters(tmp_path, monkeypatch):
 # ─── 3. 全链路：generate_once 落 experiment_id/variant_id ──────────────
 
 
-def test_pipeline_persists_experiment_id_and_variant(tmp_path, monkeypatch):
-    monkeypatch.setenv("RECAP_DB_PATH", str(tmp_path / "exp-e2e.db"))
-    monkeypatch.setenv("RECAP_WXWORK_WEBHOOK_URL", "http://example.invalid/hook")
-    monkeypatch.setenv("RECAP_PUSH_ENABLED", "false")
-    monkeypatch.setenv("RECAP_AUDIT_ENABLED", "true")
-    import agent_platform.config.settings as _settings_mod
-
-    _settings_mod._settings_instance = None  # noqa: SLF001
-    settings = _settings_mod.Settings()
+def test_pipeline_persists_experiment_id_and_variant(_wire_stock_recap_deps):
+    settings, rf = _wire_stock_recap_deps
     init_db(settings.db_path)
 
     # 单 variant 100% 流量，确保命中
@@ -249,11 +229,6 @@ def test_pipeline_persists_experiment_id_and_variant(tmp_path, monkeypatch):
     from agent_platform.agents.stock_recap.use_case import generate_once
     from agent_platform.domain.models import GenerateRequest
 
-    rf = SqliteRepositoryFactory(settings.db_path)
-    configure_default_deps(
-        repo_factory=rf,
-        guardrail=_noop_guardrail(),
-    )
     req = GenerateRequest(
         mode="daily",
         provider="mock",
@@ -282,29 +257,15 @@ def test_pipeline_persists_experiment_id_and_variant(tmp_path, monkeypatch):
     assert audits[0]["experiment_id"] == "exp-e2e"
     assert audits[0]["variant_id"] == "only"
 
-    reset_default_deps()
 
-
-def test_pipeline_no_experiment_keeps_global_prompt_version(tmp_path, monkeypatch):
+def test_pipeline_no_experiment_keeps_global_prompt_version(_wire_stock_recap_deps):
     """当 mode 没有 active 实验时，experiment_id/variant_id 应为 NULL。"""
-    monkeypatch.setenv("RECAP_DB_PATH", str(tmp_path / "exp-noop.db"))
-    monkeypatch.setenv("RECAP_WXWORK_WEBHOOK_URL", "http://example.invalid/hook")
-    monkeypatch.setenv("RECAP_PUSH_ENABLED", "false")
-    monkeypatch.setenv("RECAP_AUDIT_ENABLED", "true")
-    import agent_platform.config.settings as _settings_mod
-
-    _settings_mod._settings_instance = None  # noqa: SLF001
-    settings = _settings_mod.Settings()
+    settings, rf = _wire_stock_recap_deps
     init_db(settings.db_path)
 
     from agent_platform.agents.stock_recap.use_case import generate_once
     from agent_platform.domain.models import GenerateRequest
 
-    rf = SqliteRepositoryFactory(settings.db_path)
-    configure_default_deps(
-        repo_factory=rf,
-        guardrail=_noop_guardrail(),
-    )
     req = GenerateRequest(
         mode="daily", provider="mock", force_llm=False, skip_trading_check=True
     )
@@ -318,8 +279,6 @@ def test_pipeline_no_experiment_keeps_global_prompt_version(tmp_path, monkeypatc
     assert row["experiment_id"] is None
     assert row["variant_id"] is None
 
-    reset_default_deps()
-
 
 # ─── 4. /v1/experiments 端点 ───────────────────────────────────────────
 
@@ -331,8 +290,8 @@ def _client(settings: Settings) -> TestClient:
     return TestClient(app)
 
 
-def test_experiments_endpoint_requires_api_key(tmp_path, monkeypatch):
-    settings = _settings_via_env(tmp_path, monkeypatch)
+def test_experiments_endpoint_requires_api_key(fresh_settings):
+    settings = fresh_settings
     init_db(settings.db_path)
     client = _client(settings)
     # GET 与 POST 都需要 key
@@ -340,8 +299,8 @@ def test_experiments_endpoint_requires_api_key(tmp_path, monkeypatch):
     assert client.post("/v1/experiments", json={}).status_code == 401
 
 
-def test_experiments_endpoint_rejects_zero_weight_payload(tmp_path, monkeypatch):
-    settings = _settings_via_env(tmp_path, monkeypatch)
+def test_experiments_endpoint_rejects_zero_weight_payload(fresh_settings):
+    settings = fresh_settings
     init_db(settings.db_path)
     client = _client(settings)
     headers = {"x-api-key": "test-key"}
@@ -358,8 +317,8 @@ def test_experiments_endpoint_rejects_zero_weight_payload(tmp_path, monkeypatch)
     assert r.status_code == 400
 
 
-def test_experiments_endpoint_upsert_then_list(tmp_path, monkeypatch):
-    settings = _settings_via_env(tmp_path, monkeypatch)
+def test_experiments_endpoint_upsert_then_list(fresh_settings):
+    settings = fresh_settings
     init_db(settings.db_path)
     client = _client(settings)
     headers = {"x-api-key": "test-key"}

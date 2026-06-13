@@ -24,7 +24,7 @@ import logging
 import uuid
 from typing import Any, Dict, Optional
 
-from agent_platform.core.utils import stable_json as _stable_json
+from agent_platform.core.utils import stable_json as _stable_json, contextvars_block
 from agent_platform.core.ports.repository import RepositoryFactoryPort
 from agent_platform.agents.stock_recap.use_case import generate_once
 from agent_platform.config.settings import Settings
@@ -155,8 +155,8 @@ def run_recap_job(
     job_repo.update_running(job_id=job_id)
 
     # 让 worker 内的日志 / 工具 / 持久化读到正确的 principal + RunContext；
-    # 结束后必须 reset principal，避免 BackgroundTasks 污染后续 HTTP 请求。
-    from agent_platform.domain.principal import current_principal, set_principal
+    # 结束后自动恢复，避免 BackgroundTasks 污染后续 HTTP 请求。
+    from agent_platform.domain.principal import current_principal
 
     effective_principal = principal or PrincipalContext(
         tenant_id=job.get("tenant_id"),
@@ -164,44 +164,37 @@ def run_recap_job(
         api_key_hash=None,
         source="job-worker",
     )
-    principal_token = set_principal(effective_principal)
 
     ctx = RunContext.new(session_id=session_id, tenant_id=job.get("tenant_id"))
-    prev_ctx = current_run_context.get()
-    current_run_context.set(ctx)
-    try:
-        resp = generate_once(req, settings, ctx=ctx, repo_factory=repo_factory)
-        job_repo.mark_done(
-            job_id=job_id,
-            result_payload=resp.model_dump(),
-            request_id=resp.request_id,
-        )
-        logger.info(
-            _stable_json(
-                {
-                    "event": "job_done",
-                    "job_id": job_id,
-                    "request_id": resp.request_id,
-                }
-            )
-        )
-    except Exception as e:
-        job_repo.mark_failed(job_id=job_id, error=str(e))
-        logger.warning(
-            _stable_json(
-                {
-                    "event": "job_failed",
-                    "job_id": job_id,
-                    "error": str(e)[:300],
-                }
-            )
-        )
-    finally:
-        current_run_context.set(prev_ctx)
+
+    with contextvars_block({current_run_context: ctx, current_principal: effective_principal}):
         try:
-            current_principal.reset(principal_token)
-        except Exception:
-            pass
+            resp = generate_once(req, settings, ctx=ctx, repo_factory=repo_factory)
+            job_repo.mark_done(
+                job_id=job_id,
+                result_payload=resp.model_dump(),
+                request_id=resp.request_id,
+            )
+            logger.info(
+                _stable_json(
+                    {
+                        "event": "job_done",
+                        "job_id": job_id,
+                        "request_id": resp.request_id,
+                    }
+                )
+            )
+        except Exception as e:
+            job_repo.mark_failed(job_id=job_id, error=str(e))
+            logger.warning(
+                _stable_json(
+                    {
+                        "event": "job_failed",
+                        "job_id": job_id,
+                        "error": str(e)[:300],
+                    }
+                )
+            )
 
 
 def get_job(

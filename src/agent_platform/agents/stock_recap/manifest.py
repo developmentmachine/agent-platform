@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import Any, Dict, Iterator, List
 
 from agent_platform.core.utils import stable_json as _stable_json
+from agent_platform.core.utils import logged_errors as _logged_errors
 from agent_platform.agents.stock_recap.use_case import generate_once, iter_generate_ndjson
 from agent_platform.core.registry.agent_definition import (
     AgentCapability,
@@ -174,18 +175,27 @@ def _scheduled_handler(mode: str, settings: Any) -> None:
         logger.error(_stable_json({"event": "scheduler_error", "job": f"recap_{mode}", "error": str(e)}))
 
 
+def _on_backtest_success(_result: Any) -> dict:
+    return {"event": "scheduler_done", "job": "recap_backtest"}
+
+def _on_backtest_error(exc: Exception) -> dict:
+    return {"job": "recap_backtest"}
+
+@_logged_errors(
+    "scheduler_error",
+    reraise=False,
+    on_success=_on_backtest_success,
+    on_error=_on_backtest_error,
+    logger_name="agent_platform.agents.stock_recap.manifest",
+)
 def _backtest_handler(settings: Any) -> None:
     from agent_platform.agents.stock_recap.use_case import _try_run_backtest
 
     if not _is_trading_today():
         return
     logger.info(_stable_json({"event": "scheduler_start", "job": "recap_backtest"}))
-    try:
-        today = datetime.now().strftime("%Y-%m-%d")
-        _try_run_backtest(settings.db_path, today)
-        logger.info(_stable_json({"event": "scheduler_done", "job": "recap_backtest"}))
-    except Exception as e:
-        logger.error(_stable_json({"event": "scheduler_error", "job": "recap_backtest", "error": str(e)}))
+    today = datetime.now().strftime("%Y-%m-%d")
+    _try_run_backtest(settings.db_path, today)
 
 
 def _build_scheduled_jobs(settings: Any) -> List[ScheduledJob]:

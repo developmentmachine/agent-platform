@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import contextvars
+import functools
 from dataclasses import dataclass
-from typing import Dict, FrozenSet, Optional
+from typing import Callable, Dict, FrozenSet, Optional, TypeVar
 
 from agent_platform.core.registry.agent_definition import AgentDefinition
 from agent_platform.domain.models import Mode
@@ -101,5 +102,57 @@ def require_agent_scope() -> AgentScope:
     return scope
 
 
+F = TypeVar("F", bound=Callable[..., object])
+
+
+def with_agent_scope(
+    fn: Optional[F] = None,
+    *,
+    agent_id: Optional[str] = None,
+) -> F | Callable[[F], F]:
+    """装饰器：为函数自动设置 ``AgentScope``，结束时自动清理。
+
+    用法::
+
+        @with_agent_scope(agent_id="hsk30-tutor")
+        def chat_turn(...): ...
+
+        # 或从函数所在模块的 AGENT_ID 自动推断：
+        @with_agent_scope
+        def chat_turn(...): ...
+    """
+
+    def _decorator(func: F) -> F:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            _agent_id = agent_id
+            if _agent_id is None:
+                import inspect
+                module = inspect.getmodule(func)
+                _agent_id = getattr(module, "AGENT_ID", None)
+            if _agent_id is None:
+                raise ValueError(
+                    f"with_agent_scope: agent_id is required for {func.__qualname__}"
+                )
+            scope = AgentScope(
+                agent_id=_agent_id,
+                mcp_tool_names=frozenset(),
+                skill_ids=frozenset(),
+                skill_mode_map={},
+            )
+            token = current_agent_scope.set(scope)
+            try:
+                return func(*args, **kwargs)
+            finally:
+                current_agent_scope.reset(token)
+
+        return wrapper  # type: ignore[return-value]
+
+    if fn is not None:
+        return _decorator(fn)
+    return _decorator
+
+
 __all__ = ["AgentScope", "current_agent_scope", "resolve_skill_id_for_agent",
-           "agent_execution", "agent_execution_for_id", "require_agent_scope"]
+           "agent_execution", "agent_execution_for_id", "require_agent_scope",
+           "with_agent_scope"]

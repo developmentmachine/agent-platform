@@ -22,7 +22,7 @@ from agent_platform.domain.models import GenerateRequest, GenerateResponse
 from agent_platform.domain.run_context import RunContext
 from agent_platform.core.runtime.contextvars import current_budget, current_run_context
 from agent_platform.core.runtime.agent_scope import agent_execution
-from agent_platform.core.utils import resolve_from_context
+from agent_platform.core.utils import contextvars_block, resolve_from_context
 from agent_platform.core.ports.guardrail import GuardrailPort
 
 _RECAP_AGENT_ID = "stock-recap"
@@ -88,7 +88,6 @@ def generate_once(
         )
         request_id = run_ctx.request_id
         t0 = time.time()
-        ctx_token = current_run_context.set(run_ctx)
         tracer = get_tracer(__name__)
 
         state = RecapAgentRunState(
@@ -103,9 +102,8 @@ def generate_once(
             llm_caller=llm_caller,
             push_provider_factory=push_factory,
         )
-        budget_token = current_budget.set(state.budget)
 
-        try:
+        with contextvars_block({current_run_context: run_ctx, current_budget: state.budget}):
             with tracer.start_as_current_span(
                 "recap.generate",
                 attributes={
@@ -120,9 +118,6 @@ def generate_once(
                     span.set_attribute("recap.session_id", run_ctx.session_id)
 
                 return execute_recap_pipeline(state)
-        finally:
-            current_budget.reset(budget_token)
-            current_run_context.reset(ctx_token)
 
 
 def iter_generate_ndjson(
@@ -156,8 +151,6 @@ def iter_generate_ndjson(
         )
         request_id = run_ctx.request_id
         t0 = time.time()
-        prev_ctx = current_run_context.get()
-        current_run_context.set(run_ctx)
 
         state = RecapAgentRunState(
             request=req,
@@ -171,13 +164,10 @@ def iter_generate_ndjson(
             llm_caller=llm_caller,
             push_provider_factory=push_factory,
         )
-        prev_budget = current_budget.get()
-        current_budget.set(state.budget)
-        try:
+
+        with contextvars_block({current_run_context: run_ctx, current_budget: state.budget}):
             yield from iter_recap_agent_ndjson(state)
-        finally:
-            current_budget.set(prev_budget)
-            current_run_context.set(prev_ctx)
+
         if (
             defer_evolution_backtest
             and state.stream_pipeline_completed

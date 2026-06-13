@@ -41,23 +41,35 @@ class contextvars_block:
 
     用法::
 
-        with contextvars_block(current_run_context=run_ctx, current_budget=budget):
-            # 在这里 ContextVar 已设置
+        # 方式一：直接传 ContextVar 对象（推荐，不限于本模块变量）
+        with contextvars_block({current_run_context: run_ctx, current_budget: budget}):
             ...
-        # 退出后自动恢复原值
+
+        # 方式二：通过变量名字符串查找本模块 globals（向后兼容）
+        with contextvars_block(current_run_context=run_ctx):
+            ...
 
     替代常见的 ``token = ctx.set(v); try: ...; finally: ctx.reset(token)`` 模式。
     """
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        mappings: Optional[Dict[ContextVar, Any]] = None,
+        **kwargs: Any,
+    ) -> None:
         self._assignments: list[tuple[ContextVar, Token]] = []
+        self._mappings = mappings or {}
         self._kwargs = kwargs
 
     def __enter__(self) -> "contextvars_block":
+        # Handle direct ContextVar → value mappings
+        for cv, value in self._mappings.items():
+            token = cv.set(value)
+            self._assignments.append((cv, token))
+        # Handle string-keyed lookups (backwards compatible)
         for var, value in self._kwargs.items():
             cv: ContextVar = globals().get(var)  # type: ignore[assignment]
             if cv is None:
-                # 如果不是模块级变量，尝试从调用方的 locals 获取
                 raise ValueError(f"ContextVar '{var}' not found in module globals")
             token = cv.set(value)
             self._assignments.append((cv, token))
@@ -65,7 +77,10 @@ class contextvars_block:
 
     def __exit__(self, *exc: Any) -> None:
         for cv, token in reversed(self._assignments):
-            cv.reset(token)
+            try:
+                cv.reset(token)
+            except ValueError:
+                pass
         self._assignments.clear()
 
 
@@ -123,8 +138,11 @@ def logged_errors(
     reraise: bool = True,
     level: int = logging.WARNING,
     logger_name: Optional[str] = None,
+    on_success: Optional[Callable[[Any], Optional[Dict[str, Any]]]] = None,
+    on_error: Optional[Callable[[Exception], Optional[Dict[str, Any]]]] = None,
+    success_level: int = logging.INFO,
 ) -> Callable[[F], F]:
-    """捕获异常并以 stable_json 格式写入结构化日志。
+    """捕获异常并以 stable_json 格式写入结构化日志；可选的成功回调。
 
     替代常见的::
 
@@ -142,6 +160,13 @@ def logged_errors(
         # 有 fallback 值（不 reraise）：
         @logged_errors("fetch_data_failed", fallback=None, reraise=False)
         def fetch_data(...): ...
+
+    成功日志::
+        @logged_errors(
+            "recap_backtest_error",
+            on_success=lambda _r: {"event": "scheduler_done", "job": "recap_backtest"},
+        )
+        def backtest_handler(settings): ...
     """
     def decorator(fn: F) -> F:
         _logger = logging.getLogger(logger_name or fn.__module__)
@@ -149,12 +174,19 @@ def logged_errors(
         @functools.wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             try:
-                return fn(*args, **kwargs)
+                result = fn(*args, **kwargs)
+                if on_success is not None:
+                    extra = on_success(result)
+                    if extra is not None:
+                        _logger.log(success_level, stable_json(extra))
+                return result
             except Exception as e:
-                _logger.log(
-                    level,
-                    stable_json({"event": event, "error": str(e)[:500]}),
-                )
+                error_payload: Dict[str, Any] = {"event": event, "error": str(e)[:500]}
+                if on_error is not None:
+                    extra = on_error(e)
+                    if extra is not None:
+                        error_payload.update(extra)
+                _logger.log(level, stable_json(error_payload))
                 if reraise:
                     raise
                 if fallback is _SENTINEL:

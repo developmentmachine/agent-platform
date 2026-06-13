@@ -1,12 +1,11 @@
 """HSK 3.0 Tutor 用例：组装 prompt → LLM/stub → 验证(含重试) → 响应。
 
 重构要点：
-- @with_agent_scope 装饰器消除 AgentScope 模板代码
+- @with_agent_scope 装饰器（来自 core.runtime.agent_scope）消除 AgentScope 模板代码
 - _validate_and_retry 统一验证+重试逻辑
 """
 from __future__ import annotations
 
-import functools
 import logging
 from typing import Dict, Iterator, List, Tuple
 
@@ -17,27 +16,11 @@ from agent_platform.agents.hsk30_tutor.prompts import build_system_prompt
 from agent_platform.agents.hsk30_tutor.validation import ValidationResult, validate_reply
 from agent_platform.config.settings import Settings
 from agent_platform.core.runtime.run_context import RunContext
-from agent_platform.core.runtime.agent_scope import AgentScope, current_agent_scope
+from agent_platform.core.runtime.agent_scope import with_agent_scope
 
 logger = logging.getLogger("agent_platform.agents.hsk30_tutor.use_case")
 
 _MAX_CORRECTION_ATTEMPTS = 2
-
-
-# ── 装饰器：消除 AgentScope 设置/清理的模板代码 ──────────────────
-
-def _with_agent_scope(fn):
-    """为函数自动设置 AgentScope 上下文，结束后自动清理。"""
-    @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
-        scope = AgentScope(agent_id=AGENT_ID, mcp_tool_names=frozenset(),
-                           skill_ids=frozenset(), skill_mode_map={})
-        token = current_agent_scope.set(scope)
-        try:
-            return fn(*args, **kwargs)
-        finally:
-            current_agent_scope.reset(token)
-    return wrapper
 
 
 # ── 内部工具 ─────────────────────────────────────────────────
@@ -98,7 +81,7 @@ def _validate_and_retry(
 
 # ── 对外接口 ─────────────────────────────────────────────────
 
-@_with_agent_scope
+@with_agent_scope
 def chat_turn(req: TutorChatRequest, settings: Settings, *, ctx: RunContext | None = None) -> TutorChatResponse:
     run_ctx = (ctx or RunContext.new()).with_overrides(agent_id=AGENT_ID)
     messages = _build_messages(req)
@@ -118,7 +101,7 @@ def chat_turn(req: TutorChatRequest, settings: Settings, *, ctx: RunContext | No
                              backend=backend, note=note)  # type: ignore[arg-type]
 
 
-@_with_agent_scope
+@with_agent_scope
 def chat_turn_stream(req: TutorChatRequest, settings: Settings, *, ctx: RunContext | None = None,
                      ) -> Iterator[Tuple[str, str]]:
     """流式版本：yield (chunk_text, backend_tag)，流结束后验证全文。"""

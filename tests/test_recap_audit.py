@@ -14,27 +14,12 @@ from typing import List
 import pytest
 from fastapi.testclient import TestClient
 
-from agent_platform.config.settings import Settings
 from agent_platform.domain.models import LlmTokens, RecapDaily, RecapDailySection
 from agent_platform.infra.persistence.db import (
     init_db,
     insert_recap_audit,
     load_recap_audit,
 )
-
-
-def _settings_via_env(tmp_path, monkeypatch, *, audit_enabled: bool = True) -> Settings:
-    db = tmp_path / "audit.db"
-    monkeypatch.setenv("RECAP_DB_PATH", str(db))
-    monkeypatch.setenv("RECAP_WXWORK_WEBHOOK_URL", "http://example.invalid/hook")
-    monkeypatch.setenv("RECAP_PUSH_ENABLED", "false")
-    monkeypatch.setenv("RECAP_API_KEY", "test-key")
-    monkeypatch.setenv("RECAP_AUDIT_ENABLED", "true" if audit_enabled else "false")
-    # 关键：FastAPI DI 内部走 ``get_settings()``，它是模块级单例（不是 lru_cache），
-    # 必须显式重置 ``_settings_instance`` 才能让新 env 生效。
-    import agent_platform.config.settings as _settings_mod
-    _settings_mod._settings_instance = None  # noqa: SLF001
-    return Settings()
 
 
 class _NoopGuardrail:
@@ -67,8 +52,8 @@ def _build_recap() -> RecapDaily:
     )
 
 
-def test_insert_and_load_round_trip(tmp_path, monkeypatch):
-    settings = _settings_via_env(tmp_path, monkeypatch)
+def test_insert_and_load_round_trip(fresh_settings):
+    settings = fresh_settings
     init_db(settings.db_path)
     recap = _build_recap()
     messages = [
@@ -111,8 +96,8 @@ def test_insert_and_load_round_trip(tmp_path, monkeypatch):
     assert row["tokens"]["input_tokens"] == 120
 
 
-def test_idempotent_on_same_request_id(tmp_path, monkeypatch):
-    settings = _settings_via_env(tmp_path, monkeypatch)
+def test_idempotent_on_same_request_id(fresh_settings):
+    settings = fresh_settings
     init_db(settings.db_path)
     recap = _build_recap()
 
@@ -149,61 +134,46 @@ def test_idempotent_on_same_request_id(tmp_path, monkeypatch):
     assert rows[0]["messages"] == [{"role": "user", "content": "first"}]
 
 
-def test_pipeline_writes_audit_when_enabled(tmp_path, monkeypatch):
+def test_pipeline_writes_audit_when_enabled(_wire_stock_recap_deps):
     """全链路：generate_once → recap_audit 表能查到对应 request_id。"""
-    monkeypatch.setenv("RECAP_DB_PATH", str(tmp_path / "audit-e2e.db"))
-    monkeypatch.setenv("RECAP_WXWORK_WEBHOOK_URL", "http://example.invalid/hook")
-    monkeypatch.setenv("RECAP_PUSH_ENABLED", "false")
-    monkeypatch.setenv("RECAP_AUDIT_ENABLED", "true")
-
-    from agent_platform.agents.stock_recap.use_case import generate_once
-    from agent_platform.agents.stock_recap.deps import configure_default_deps, reset_default_deps
-    import agent_platform.config.settings as _settings_mod
-    _settings_mod._settings_instance = None  # noqa: SLF001
-    settings = _settings_mod.Settings()
+    settings, rf = _wire_stock_recap_deps
     init_db(settings.db_path)
 
+    from agent_platform.agents.stock_recap.use_case import generate_once
     from agent_platform.domain.models import GenerateRequest
 
-    from agent_platform.infra.persistence.factory import SqliteRepositoryFactory
-    rf = SqliteRepositoryFactory(settings.db_path)
-    configure_default_deps(repo_factory=rf, guardrail=_NoopGuardrail())
-    try:
-        req = GenerateRequest(
-            mode="daily",
-            provider="mock",
-            force_llm=False,
-            skip_trading_check=True,
-        )
-        resp = generate_once(req, settings, repo_factory=rf)
-        rows = load_recap_audit(settings.db_path, request_id=resp.request_id)
-        assert len(rows) == 1
-        row = rows[0]
-        assert row["mode"] == "daily"
-        assert row["provider"] == "mock"
-        # force_llm=False 时不会有 LLM 调用，因此 messages 字段可能为 None / 空
-        assert row["llm_error"] is None
-        assert row["critic_retries_used"] == 0
-    finally:
-        reset_default_deps()
+    req = GenerateRequest(
+        mode="daily",
+        provider="mock",
+        force_llm=False,
+        skip_trading_check=True,
+    )
+    resp = generate_once(req, settings, repo_factory=rf)
+    rows = load_recap_audit(settings.db_path, request_id=resp.request_id)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["mode"] == "daily"
+    assert row["provider"] == "mock"
+    # force_llm=False 时不会有 LLM 调用，因此 messages 字段可能为 None / 空
+    assert row["llm_error"] is None
+    assert row["critic_retries_used"] == 0
 
 
-def test_pipeline_skips_audit_when_disabled(tmp_path, monkeypatch):
-    monkeypatch.setenv("RECAP_DB_PATH", str(tmp_path / "audit-off.db"))
-    monkeypatch.setenv("RECAP_WXWORK_WEBHOOK_URL", "http://example.invalid/hook")
-    monkeypatch.setenv("RECAP_PUSH_ENABLED", "false")
+def test_pipeline_skips_audit_when_disabled(fresh_settings, monkeypatch):
+    """When audit is disabled, pipeline should not write to recap_audit table."""
+    import agent_platform.config.settings as _settings_mod
+
     monkeypatch.setenv("RECAP_AUDIT_ENABLED", "false")
+    _settings_mod._settings_instance = None  # noqa: SLF001
+    settings = _settings_mod.Settings()
+
+    init_db(settings.db_path)
 
     from agent_platform.agents.stock_recap.use_case import generate_once
     from agent_platform.agents.stock_recap.deps import configure_default_deps, reset_default_deps
-    import agent_platform.config.settings as _settings_mod
     from agent_platform.domain.models import GenerateRequest
-
-    _settings_mod._settings_instance = None  # noqa: SLF001
-    settings = _settings_mod.Settings()
-    init_db(settings.db_path)
-
     from agent_platform.infra.persistence.factory import SqliteRepositoryFactory
+
     rf = SqliteRepositoryFactory(settings.db_path)
     configure_default_deps(repo_factory=rf, guardrail=_NoopGuardrail())
     try:
@@ -217,8 +187,8 @@ def test_pipeline_skips_audit_when_disabled(tmp_path, monkeypatch):
         reset_default_deps()
 
 
-def test_audit_endpoint_get_by_id(tmp_path, monkeypatch):
-    settings = _settings_via_env(tmp_path, monkeypatch)
+def test_audit_endpoint_get_by_id(fresh_settings):
+    settings = fresh_settings
     init_db(settings.db_path)
     insert_recap_audit(
         settings.db_path,
@@ -253,8 +223,8 @@ def test_audit_endpoint_get_by_id(tmp_path, monkeypatch):
     assert r404.status_code == 404
 
 
-def test_audit_endpoint_list_filter_by_mode(tmp_path, monkeypatch):
-    settings = _settings_via_env(tmp_path, monkeypatch)
+def test_audit_endpoint_list_filter_by_mode(fresh_settings):
+    settings = fresh_settings
     init_db(settings.db_path)
     for rid, mode in [("a", "daily"), ("b", "strategy"), ("c", "daily")]:
         insert_recap_audit(

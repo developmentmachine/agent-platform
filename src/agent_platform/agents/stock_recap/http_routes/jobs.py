@@ -24,7 +24,7 @@ from agent_platform.config.settings import Settings, get_settings
 from agent_platform.domain.models import GenerateRequest
 from agent_platform.domain.principal import PrincipalContext
 from agent_platform.core.http import require_api_key, require_rate_limit
-from agent_platform.core.ports.guardrail import GuardrailError, GuardrailPort
+from agent_platform.core.ports.guardrail import GuardrailPort, guardrail_validate
 
 router = APIRouter(tags=["jobs"])
 
@@ -47,15 +47,9 @@ def api_jobs_submit(
     deps: StockRecapDeps = Depends(_get_deps),
 ) -> Dict[str, Any]:
     """登记一个 recap 异步 job，并把执行挂到 BackgroundTasks。"""
-    try:
-        deps.guardrail.validate_generate_request(req)
-    except GuardrailError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    guardrail_validate(deps.guardrail.validate_generate_request, req)
 
     idem = (x_idempotency_key or "").strip() or None
-
-    if deps.init_db is not None:
-        deps.init_db(settings.db_path)
     submission = submit_recap_job(
         req,
         settings,
@@ -85,8 +79,6 @@ def api_jobs_get(
     principal: PrincipalContext = Depends(require_api_key),
     deps: StockRecapDeps = Depends(_get_deps),
 ) -> Dict[str, Any]:
-    if deps.init_db is not None:
-        deps.init_db(settings.db_path)
     job = get_job(settings, repo_factory=deps.repo_factory, job_id=job_id, tenant_id=principal.tenant_id)
     if job is None:
         raise HTTPException(status_code=404, detail="job not found")
@@ -100,8 +92,6 @@ def api_jobs_list(
     principal: PrincipalContext = Depends(require_api_key),
     deps: StockRecapDeps = Depends(_get_deps),
 ) -> Dict[str, Any]:
-    if deps.init_db is not None:
-        deps.init_db(settings.db_path)
     items = list_jobs_for_api(
         settings,
         repo_factory=deps.repo_factory,

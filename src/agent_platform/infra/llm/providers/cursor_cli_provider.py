@@ -5,13 +5,15 @@ import json
 import logging
 import os
 import subprocess
-import time
 from typing import Dict, List, Optional, Tuple
 
 from agent_platform.config.settings import Settings
 from agent_platform.domain.models import LlmError, LlmTokens, LlmTransportError, Mode, Recap
 from agent_platform.infra.llm.parse import _stable_json, parse_and_validate
-from agent_platform.infra.llm.providers._cli_shared import inject_prefetch
+from agent_platform.infra.llm.providers._cli_shared import (
+    _run_cli_subprocess,
+    inject_prefetch,
+)
 
 logger = logging.getLogger("agent_platform.infra.llm.providers.cursor_cli")
 
@@ -52,61 +54,33 @@ class CursorCliProvider:
             + [prompt]
         )
 
-        t0 = time.time()
-        try:
-            proc = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
-            )
-        except Exception as e:
-            raise LlmTransportError(f"cursor-cli 启动失败: {e}") from e
-
-        stdout_lines: List[str] = []
         final_result_text: Optional[str] = None
         assistant_text_parts: List[str] = []
-        last_log = 0.0
 
-        while True:
-            now = time.time()
-            if now - last_log >= 5:
-                last_log = now
-                logger.info(_stable_json({"event": "cursor_cli_running", "elapsed_s": int(now - t0)}))
+        def _parse_line(line: str) -> None:
+            nonlocal final_result_text
+            try:
+                evt = json.loads(line)
+                if isinstance(evt, dict):
+                    if evt.get("type") == "result" and isinstance(evt.get("result"), str):
+                        final_result_text = evt["result"]
+                    if evt.get("type") == "assistant":
+                        msg = evt.get("message")
+                        if isinstance(msg, dict):
+                            for c in msg.get("content") or []:
+                                if isinstance(c, dict) and c.get("type") == "text":
+                                    assistant_text_parts.append(c.get("text", ""))
+            except Exception:
+                pass
 
-            if proc.poll() is not None:
-                break
-
-            if now - t0 > settings.cursor_timeout_s:
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
-                raise LlmTransportError(f"cursor-cli 超时（>{settings.cursor_timeout_s}s）")
-
-            got = False
-            if proc.stdout:
-                line = proc.stdout.readline()
-                if line:
-                    got = True
-                    stdout_lines.append(line)
-                    try:
-                        evt = json.loads(line)
-                        if isinstance(evt, dict):
-                            if evt.get("type") == "result" and isinstance(evt.get("result"), str):
-                                final_result_text = evt["result"]
-                            if evt.get("type") == "assistant":
-                                msg = evt.get("message")
-                                if isinstance(msg, dict):
-                                    for c in msg.get("content") or []:
-                                        if isinstance(c, dict) and c.get("type") == "text":
-                                            assistant_text_parts.append(c.get("text", ""))
-                    except Exception:
-                        pass
-            if not got:
-                time.sleep(0.2)
-
-        rc = proc.returncode or 0
-        if rc != 0:
-            err_tail = "".join(stdout_lines).strip()[-800:]
-            raise LlmTransportError(f"cursor-cli 失败(code={rc}): {err_tail}")
+        stdout_lines = _run_cli_subprocess(
+            cmd,
+            settings.cursor_timeout_s,
+            "cursor-cli",
+            logger,
+            stderr=subprocess.STDOUT,
+            line_callback=_parse_line,
+        )
 
         raw = final_result_text or "".join(assistant_text_parts) or "".join(stdout_lines)
         if not raw.strip():

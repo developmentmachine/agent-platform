@@ -13,6 +13,7 @@ import logging
 from typing import Any, List
 
 from agent_platform.core.utils import stable_json as _stable_json
+from agent_platform.core.utils import logged_errors as _logged_errors
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -26,28 +27,34 @@ logger = logging.getLogger("agent_platform.scheduler")
 
 
 
+def _on_sweep_success(summary: Any) -> dict | None:
+    if not summary.claimed:
+        return None
+    return {
+        "event": "scheduler_outbox_sweep",
+        "claimed": summary.claimed,
+        "done": summary.done,
+        "failed_retry": summary.failed_retry,
+        "failed_final": summary.failed_final,
+    }
+
+def _on_sweep_error(exc: Exception) -> dict:
+    return {"job": "outbox"}
+
+@_logged_errors(
+    "scheduler_error",
+    reraise=False,
+    on_success=_on_sweep_success,
+    on_error=_on_sweep_error,
+    logger_name="agent_platform.scheduler",
+)
 def _run_outbox_sweep(settings: Settings) -> None:
     """周期 sweep outbox：兜底 ``BackgroundTasks`` 没消费成功的任务。
 
     与交易日无关 —— 失败重试可能跨日。单次最多处理 32 条；正常负载下完全够用，
     且不会让一次 sweep 拖太久。
     """
-    try:
-        summary = outbox.process_due(settings.db_path, batch=32)
-        if summary.claimed:
-            logger.info(
-                _stable_json(
-                    {
-                        "event": "scheduler_outbox_sweep",
-                        "claimed": summary.claimed,
-                        "done": summary.done,
-                        "failed_retry": summary.failed_retry,
-                        "failed_final": summary.failed_final,
-                    }
-                )
-            )
-    except Exception as e:
-        logger.error(_stable_json({"event": "scheduler_error", "job": "outbox", "error": str(e)}))
+    outbox.process_due(settings.db_path, batch=32)
 
 
 def _load_registry():

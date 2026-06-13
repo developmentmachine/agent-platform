@@ -392,7 +392,18 @@ def _phase_index_memory(state: RecapAgentRunState, tracer: Any) -> None:
             )
 
 
-@logged_errors("push_failed", reraise=False, fallback=False, logger_name="agent_platform.agents.stock_recap.legacy_pipeline")
+def _on_push_success(result: Any) -> dict | None:
+    if result:
+        return {"event": "push_done"}
+    return None
+
+@logged_errors(
+    "push_failed",
+    reraise=False,
+    fallback=False,
+    logger_name="agent_platform.agents.stock_recap.legacy_pipeline",
+    on_success=_on_push_success,
+)
 def _safe_push_recap(settings: Any, recap: Any, request_id: str, repo_factory: Any = None, push_provider_factory: Any = None) -> bool:
     return _push_recap(settings, recap, request_id=request_id, repo_factory=repo_factory, push_provider_factory=push_provider_factory)
 

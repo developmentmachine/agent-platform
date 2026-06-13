@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 from agent_platform.config.settings import Settings, get_settings
 from agent_platform.infra.persistence.db import (
     get_prompt_version,
-    init_db,
     list_prompt_experiments,
     load_evolution_history,
     load_experiment_variants,
@@ -70,7 +69,6 @@ def api_history(
     settings: Settings = Depends(get_settings),
     principal: PrincipalContext = Depends(require_api_key),
 ) -> Dict[str, Any]:
-    init_db(settings.db_path)
     return {
         "items": load_history(
             settings.db_path, limit=limit, tenant_id=principal.tenant_id
@@ -83,7 +81,6 @@ def api_backtest(
     limit: int = 10,
     settings: Settings = Depends(get_settings),
 ) -> Dict[str, Any]:
-    init_db(settings.db_path)
     return {"items": load_recent_backtests(settings.db_path, limit=limit)}
 
 
@@ -92,7 +89,6 @@ def api_evolution(
     limit: int = 10,
     settings: Settings = Depends(get_settings),
 ) -> Dict[str, Any]:
-    init_db(settings.db_path)
     return {"items": load_evolution_history(settings.db_path, limit=limit)}
 
 
@@ -106,7 +102,6 @@ def api_audit_one(
 
     多租户场景下，仅允许访问自己的 audit；越权直接 404（避免泄漏存在性）。
     """
-    init_db(settings.db_path)
     items = load_recap_audit(
         settings.db_path,
         request_id=request_id,
@@ -125,7 +120,6 @@ def api_audit_list(
     settings: Settings = Depends(get_settings),
     principal: PrincipalContext = Depends(require_api_key),
 ) -> Dict[str, Any]:
-    init_db(settings.db_path)
     return {
         "items": load_recap_audit(
             settings.db_path, mode=mode, limit=limit, tenant_id=principal.tenant_id
@@ -163,7 +157,6 @@ def api_experiments_upsert(
 
     至少要有一个 traffic_weight>0 的 variant，否则分桶必失败 → 直接 400。
     """
-    init_db(settings.db_path)
     if not payload.variants or sum(v.traffic_weight for v in payload.variants) <= 0:
         raise HTTPException(
             status_code=400,
@@ -201,7 +194,6 @@ def api_experiments_list(
     limit: int = 50,
     settings: Settings = Depends(get_settings),
 ) -> Dict[str, Any]:
-    init_db(settings.db_path)
     items = list_prompt_experiments(
         settings.db_path, mode=mode, status=status, limit=limit
     )

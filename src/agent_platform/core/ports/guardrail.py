@@ -6,11 +6,26 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
+from typing import Any, Callable, Dict, List, Optional, Protocol, runtime_checkable
 
 
 class GuardrailError(ValueError):
     """护栏拒绝的请求。"""
+
+
+def guardrail_validate(fn: Callable[..., None], *args: Any, **kwargs: Any) -> None:
+    """调用护栏校验函数，自动将 ``GuardrailError`` 转为 ``HTTPException(400)``。
+
+    用法::
+        guardrail_validate(deps.guardrail.validate_generate_request, req)
+        guardrail_validate(deps.guardrail.validate_feedback_request, req)
+    """
+    try:
+        fn(*args, **kwargs)
+    except GuardrailError as e:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @dataclass

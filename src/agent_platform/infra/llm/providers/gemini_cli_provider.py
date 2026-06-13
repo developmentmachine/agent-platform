@@ -4,13 +4,15 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
-import time
 from typing import Dict, List, Tuple
 
 from agent_platform.config.settings import Settings
 from agent_platform.domain.models import LlmError, LlmTokens, LlmTransportError, Mode, Recap
-from agent_platform.infra.llm.parse import _stable_json, parse_and_validate
-from agent_platform.infra.llm.providers._cli_shared import inject_prefetch
+from agent_platform.infra.llm.parse import parse_and_validate
+from agent_platform.infra.llm.providers._cli_shared import (
+    _run_cli_subprocess,
+    inject_prefetch,
+)
 
 logger = logging.getLogger("agent_platform.infra.llm.providers.gemini_cli")
 
@@ -50,50 +52,14 @@ class GeminiCliProvider:
 
         cmd = base_cmd + ["-p", prompt]
 
-        t0 = time.time()
-        try:
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                env=env,
-            )
-        except Exception as e:
-            raise LlmTransportError(f"gemini-cli 启动失败: {e}") from e
-
-        stdout_lines: List[str] = []
-        last_log = 0.0
-
-        while True:
-            now = time.time()
-            if now - last_log >= 5:
-                last_log = now
-                logger.info(_stable_json({"event": "gemini_running", "elapsed_s": int(now - t0)}))
-
-            if proc.poll() is not None:
-                break
-
-            if now - t0 > settings.gemini_timeout_s:
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
-                raise LlmTransportError(f"gemini-cli 超时（>{settings.gemini_timeout_s}s）")
-
-            if proc.stdout:
-                line = proc.stdout.readline()
-                if line:
-                    stdout_lines.append(line)
-                else:
-                    time.sleep(0.2)
-
-        rc = proc.returncode or 0
-        if rc != 0:
-            stderr_out = ""
-            if proc.stderr:
-                stderr_out = proc.stderr.read()[-500:]
-            raise LlmTransportError(f"gemini-cli 失败(code={rc}): {stderr_out}")
+        stdout_lines = _run_cli_subprocess(
+            cmd,
+            settings.gemini_timeout_s,
+            "gemini-cli",
+            logger,
+            stderr=subprocess.PIPE,
+            env=env,
+        )
 
         raw = "".join(stdout_lines).strip()
         if not raw:

@@ -28,6 +28,10 @@ async def _app_lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     setup_structured_logging(level=logging.INFO)
     configure_tracing(get_settings())
+    # ── 数据库一次性初始化（替代各路由重复 init_db 调用） ────────────────
+    from agent_platform.infra.persistence.db import init_db
+
+    init_db(get_settings().db_path)
     yield
 
 

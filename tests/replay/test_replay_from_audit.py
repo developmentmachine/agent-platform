@@ -15,7 +15,6 @@ import json
 import pytest
 
 from agent_platform.agents.stock_recap.use_case import generate_once
-from agent_platform.config.settings import Settings
 from agent_platform.domain.models import (
     GenerateRequest,
     LlmTokens,
@@ -66,24 +65,11 @@ def _build_recap(date: str = "2025-03-04") -> RecapDaily:
     )
 
 
-def _settings_via_env(tmp_path, monkeypatch) -> Settings:
-    db = tmp_path / "replay.db"
-    monkeypatch.setenv("RECAP_DB_PATH", str(db))
-    monkeypatch.setenv("RECAP_WXWORK_WEBHOOK_URL", "http://example.invalid/hook")
-    monkeypatch.setenv("RECAP_PUSH_ENABLED", "false")
-    monkeypatch.setenv("RECAP_API_KEY", "test-key")
-    monkeypatch.setenv("RECAP_AUDIT_ENABLED", "true")
-    import agent_platform.config.settings as _settings_mod
-
-    _settings_mod._settings_instance = None  # noqa: SLF001
-    return Settings()
-
-
 def test_replay_provider_returns_recorded_recap(
-    tmp_path, monkeypatch, replay_provider
+    fresh_settings, replay_provider
 ):
     """``call_llm(model_spec='replay:fake')`` 直接返回 ReplayProvider 设的 recap。"""
-    settings = _settings_via_env(tmp_path, monkeypatch)
+    settings = fresh_settings
     recap = _build_recap()
     replay_provider.recap_to_return = recap
     replay_provider.tokens_to_return = LlmTokens(
@@ -111,9 +97,9 @@ def test_replay_provider_returns_recorded_recap(
     assert replay_provider.calls[0]["mode"] == "daily"
 
 
-def test_replay_from_audit_round_trip(tmp_path, monkeypatch, replay_provider):
+def test_replay_from_audit_round_trip(fresh_settings, replay_provider):
     """audit 表 → ReplayProvider → 完整 pipeline → ``recap_runs`` 与原 audit 一致。"""
-    settings = _settings_via_env(tmp_path, monkeypatch)
+    settings = fresh_settings
     init_db(settings.db_path)
 
     # 1. 把"历史"调用写入 audit 表（模拟过去某次真实生成的现场）
