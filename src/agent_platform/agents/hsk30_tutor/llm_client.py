@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import functools
 import logging
+import threading
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 from tenacity import (
@@ -27,27 +28,34 @@ logger = logging.getLogger("agent_platform.agents.hsk30_tutor.llm_client")
 _MAX_RETRIES = 2
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
-# ── Client 缓存 ─────────────────────────────────────────────
+# ── Client 缓存（线程安全）──────────────────────────────────
+_client_lock = threading.Lock()
 _cached_client: Any = None
 _cached_key: Tuple[Optional[str], Optional[str]] = (None, None)
 
 
 def _get_client(settings: Settings) -> Any:
-    """获取或创建 OpenAI client（按 api_key + base_url 缓存）。"""
+    """获取或创建 OpenAI client（按 api_key + base_url 缓存，线程安全）。"""
     global _cached_client, _cached_key
     key = (settings.openai_api_key, settings.openai_base_url)
+    # Fast path: 无锁读（已缓存且 key 匹配）
     if _cached_client is not None and _cached_key == key:
         return _cached_client
 
-    try:
-        from openai import OpenAI
-    except ImportError as e:
-        raise ImportError(f"openai package unavailable: {e}") from e
+    with _client_lock:
+        # Double-check: 拿到锁后再检查一次
+        if _cached_client is not None and _cached_key == key:
+            return _cached_client
 
-    _cached_client = OpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url,
-                            timeout=settings.timeout_s)
-    _cached_key = key
-    return _cached_client
+        try:
+            from openai import OpenAI
+        except ImportError as e:
+            raise ImportError(f"openai package unavailable: {e}") from e
+
+        _cached_client = OpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url,
+                                timeout=settings.timeout_s)
+        _cached_key = key
+        return _cached_client
 
 
 def _stub_from_messages(messages: List[Dict[str, str]]) -> str:
@@ -67,9 +75,16 @@ def _stub_from_messages(messages: List[Dict[str, str]]) -> str:
 # ── 基础设施 ────────────────────────────────────────────────
 
 def _is_retryable(exc: BaseException) -> bool:
-    """判断异常是否可重试（HTTP 429/5xx）。"""
+    """判断异常是否可重试（HTTP 429/5xx、连接/超时/限流）。"""
+    # HTTP status code (openai.APIStatusError)
     status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
-    return isinstance(status, int) and status in _RETRYABLE_STATUS
+    if isinstance(status, int) and status in _RETRYABLE_STATUS:
+        return True
+    # openai.APIConnectionError, APITimeoutError, RateLimitError
+    exc_name = type(exc).__name__
+    if exc_name in ("APIConnectionError", "APITimeoutError", "RateLimitError"):
+        return True
+    return False
 
 
 def _retry_loop(fn: Callable[[], Any], max_retries: int = _MAX_RETRIES) -> Any:

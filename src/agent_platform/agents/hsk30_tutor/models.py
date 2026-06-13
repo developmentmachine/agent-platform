@@ -32,5 +32,5 @@ class TutorChatResponse(BaseModel):
     reply: str
     level: int
     request_id: str
-    backend: Literal["llm", "stub"] = "stub"
+    backend: Literal["llm", "stub", "validation_note"] = "stub"
     note: Optional[str] = None

@@ -50,6 +50,7 @@ def tutor_chat_stream(body: TutorChatRequest, settings: Settings = Depends(get_s
 
 @router.post("/chat/direct", response_model=TutorChatResponse, include_in_schema=False)
 def tutor_chat_direct(body: TutorChatRequest, settings: Settings = Depends(get_settings),
+                      _p: PrincipalContext = Depends(require_api_key),
                       _r: None = Depends(require_rate_limit)) -> TutorChatResponse:
     """不经 AgentRuntime 的直连路径（集成测试用）。"""
     return chat_turn(body, settings, ctx=RunContext.new())
