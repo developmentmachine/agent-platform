@@ -31,6 +31,12 @@ from agent_platform.domain.repositories import (
     RecapAuditRepository,
     RunRepository,
 )
+from agent_platform.core.ports.repository import (
+    JobRepository,
+    PushLogRepository,
+    PromptVersionRepository,
+    ToolInvocationRepository,
+)
 from agent_platform.infra.persistence import db as _db
 
 
@@ -327,6 +333,186 @@ class SqliteRecapAuditRepository(RecapAuditRepository):
         )
 
 
+# ─── Job ──────────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class SqliteJobRepository(JobRepository):
+    db_path: str
+
+    def insert(
+        self,
+        *,
+        job_id: str,
+        kind: str,
+        request_payload: Dict[str, Any],
+        tenant_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        status: str = "queued",
+        created_at: Optional[str] = None,
+    ) -> bool:
+        return _db.insert_job(
+            self.db_path,
+            job_id=job_id,
+            kind=kind,
+            request_payload=request_payload,
+            tenant_id=tenant_id,
+            idempotency_key=idempotency_key,
+            status=status,
+            created_at=created_at,
+        )
+
+    def load(self, *, job_id: str, tenant_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        return _db.load_job(self.db_path, job_id=job_id, tenant_id=tenant_id)
+
+    def load_by_idem(
+        self, *, tenant_id: Optional[str], idempotency_key: str
+    ) -> Optional[Dict[str, Any]]:
+        return _db.load_job_by_idem(
+            self.db_path, tenant_id=tenant_id, idempotency_key=idempotency_key
+        )
+
+    def list(
+        self,
+        *,
+        tenant_id: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        return _db.list_jobs(self.db_path, tenant_id=tenant_id, status=status, limit=limit)
+
+    def update_running(
+        self,
+        *,
+        job_id: str,
+        request_id: Optional[str] = None,
+        started_at: Optional[str] = None,
+    ) -> None:
+        _db.update_job_running(self.db_path, job_id=job_id, request_id=request_id, started_at=started_at)
+
+    def mark_done(
+        self,
+        *,
+        job_id: str,
+        result_payload: Dict[str, Any],
+        request_id: Optional[str] = None,
+        finished_at: Optional[str] = None,
+    ) -> None:
+        _db.mark_job_done(
+            self.db_path,
+            job_id=job_id,
+            result_payload=result_payload,
+            request_id=request_id,
+            finished_at=finished_at,
+        )
+
+    def mark_failed(
+        self,
+        *,
+        job_id: str,
+        error: str,
+        request_id: Optional[str] = None,
+        finished_at: Optional[str] = None,
+    ) -> None:
+        _db.mark_job_failed(
+            self.db_path,
+            job_id=job_id,
+            error=error,
+            request_id=request_id,
+            finished_at=finished_at,
+        )
+
+
+# ─── PushLog ──────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class SqlitePushLogRepository(PushLogRepository):
+    db_path: str
+
+    def get(self, *, request_id: str, channel: str) -> Optional[Dict[str, Any]]:
+        return _db.get_push_log(self.db_path, request_id=request_id, channel=channel)
+
+    def upsert(
+        self,
+        *,
+        request_id: str,
+        channel: str,
+        status: str,
+        now_iso: str,
+        last_error: Optional[str] = None,
+    ) -> None:
+        _db.upsert_push_log(
+            self.db_path,
+            request_id=request_id,
+            channel=channel,
+            status=status,
+            now_iso=now_iso,
+            last_error=last_error,
+        )
+
+
+# ─── PromptVersion ────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class SqlitePromptVersionRepository(PromptVersionRepository):
+    db_path: str
+
+    def get_active(self) -> Optional[str]:
+        return _db.get_active_prompt_version(self.db_path)
+
+    def set_active(self, *, version: str, updated_at: str) -> None:
+        _db.set_active_prompt_version(self.db_path, version, updated_at=updated_at)
+
+
+# ─── ToolInvocation ───────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class SqliteToolInvocationRepository(ToolInvocationRepository):
+    db_path: str
+
+    def insert(
+        self,
+        *,
+        request_id: Optional[str],
+        tool_name: str,
+        status: str,
+        read_only: bool,
+        principal_role: Optional[str],
+        arguments: Optional[Dict[str, Any]],
+        latency_ms: Optional[int],
+        error: Optional[str],
+        created_at: str,
+        tenant_id: Optional[str] = None,
+    ) -> None:
+        _db.insert_tool_invocation(
+            self.db_path,
+            request_id=request_id,
+            tool_name=tool_name,
+            status=status,
+            read_only=read_only,
+            principal_role=principal_role,
+            arguments=arguments,
+            latency_ms=latency_ms,
+            error=error,
+            created_at=created_at,
+            tenant_id=tenant_id,
+        )
+
+    def load_recent(
+        self,
+        *,
+        request_id: Optional[str] = None,
+        tool_name: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        return _db.load_recent_tool_invocations(
+            self.db_path, request_id=request_id, tool_name=tool_name, limit=limit
+        )
+
+
 # ─── 工厂 ────────────────────────────────────────────────────────────────
 
 
@@ -346,7 +532,10 @@ class Repositories:
     backtests: BacktestRepository
     experiments: ExperimentRepository
     audits: RecapAuditRepository
-
+    jobs: JobRepository
+    push_logs: PushLogRepository
+    tool_invocations: ToolInvocationRepository
+    prompt_version: PromptVersionRepository
 
 def build_default_repositories(db_path: str) -> Repositories:
     """SQLite 的默认实现；其它后端可以提供 ``build_postgres_repositories(...)`` 等。"""
@@ -357,6 +546,10 @@ def build_default_repositories(db_path: str) -> Repositories:
         backtests=SqliteBacktestRepository(db_path),
         experiments=SqliteExperimentRepository(db_path),
         audits=SqliteRecapAuditRepository(db_path),
+        jobs=SqliteJobRepository(db_path),
+        push_logs=SqlitePushLogRepository(db_path),
+        tool_invocations=SqliteToolInvocationRepository(db_path),
+        prompt_version=SqlitePromptVersionRepository(db_path),
     )
 
 
@@ -366,7 +559,11 @@ __all__ = [
     "SqliteEvolutionRepository",
     "SqliteExperimentRepository",
     "SqliteFeedbackRepository",
+    "SqliteJobRepository",
+    "SqlitePushLogRepository",
+    "SqlitePromptVersionRepository",
     "SqliteRecapAuditRepository",
     "SqliteRunRepository",
+    "SqliteToolInvocationRepository",
     "build_default_repositories",
 ]

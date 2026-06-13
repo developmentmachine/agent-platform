@@ -14,6 +14,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
+from agent_platform.core.utils import stable_json as _stable_json
 from agent_platform.domain.data_providers import DataProviderRegistry, DataProviderSpec
 from agent_platform.domain.models import MarketSnapshot
 
@@ -56,8 +57,6 @@ def _today_str() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
-def _stable_json(obj: object) -> str:
-    return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def collect_snapshot(

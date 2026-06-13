@@ -1,7 +1,29 @@
-"""Agent 编排：W3 起为 ``agents.stock_recap`` 的 shim；lazy 避免循环导入。"""
+"""向后兼容 shim — 实际代码已迁入 agents.stock_recap.*。
+
+.. deprecated::
+    请直接 ``from agent_platform.agents.stock_recap.legacy_pipeline import ...``。
+"""
+from __future__ import annotations
+
+import warnings
+
+_warned = False
+
+
+def _warn() -> None:
+    global _warned
+    if not _warned:
+        warnings.warn(
+            "agent_platform.application.orchestration is deprecated; "
+            "import from agent_platform.agents.stock_recap.legacy_pipeline instead.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        _warned = True
 
 
 def __getattr__(name: str):
+    _warn()
     if name == "RecapAgentRunState":
         from agent_platform.agents.stock_recap.recap_state import RecapAgentRunState
 

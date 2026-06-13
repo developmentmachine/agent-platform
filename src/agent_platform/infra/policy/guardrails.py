@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from agent_platform.domain.models import FeedbackRequest, GenerateRequest, Recap
 from agent_platform.infra.policy.output_rules import RuleSet, Violation, apply_rules, load_ruleset
+from agent_platform.core.ports.guardrail import GuardrailError  # domain exception lives in core
 
 logger = logging.getLogger("agent_platform.infra.policy.guardrails")
 
@@ -27,9 +28,6 @@ _MAX_TAG_LEN = 64
 
 _DEFAULT_RULESET: Optional[RuleSet] = None
 
-
-class GuardrailError(ValueError):
-    """护栏拒绝的请求。"""
 
 
 def validate_generate_request(req: GenerateRequest) -> None:

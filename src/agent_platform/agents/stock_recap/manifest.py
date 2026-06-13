@@ -17,6 +17,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, Iterator, List
 
+from agent_platform.core.utils import stable_json as _stable_json
 from agent_platform.agents.stock_recap.use_case import generate_once, iter_generate_ndjson
 from agent_platform.core.registry.agent_definition import (
     AgentCapability,
@@ -102,16 +103,18 @@ def _cli_run(args: Any, settings: Any, parser: Any) -> int:
 
 
 def _http_routers() -> List[Any]:
-    from agent_platform.agents.stock_recap.http_routes import feedback_router, recap_router
+    from agent_platform.agents.stock_recap.http_routes import (
+        feedback_router,
+        recap_router,
+        jobs_router,
+    )
 
-    return [recap_router, feedback_router]
+    return [recap_router, feedback_router, jobs_router]
 
 
 # ─── W6: 调度任务钩子 ──────────────────────────────────────────────────────
 
 
-def _stable_json(obj: Any) -> str:
-    return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def _is_trading_today() -> bool:
@@ -138,16 +141,18 @@ def _write_output_files(
 def _scheduled_handler(mode: str, settings: Any) -> None:
     """统一的 cron handler — daily_recap / strategy 都走这条。"""
     from agent_platform.agents.stock_recap.use_case import generate_once
-    from agent_platform.infra.persistence.db import init_db
+    from agent_platform.agents.stock_recap.deps import default_deps
 
     if not _is_trading_today():
         logger.info(_stable_json({"event": "scheduler_skip", "job": f"recap_{mode}", "reason": "non_trading_day"}))
         return
     logger.info(_stable_json({"event": "scheduler_start", "job": f"recap_{mode}"}))
     try:
-        init_db(settings.db_path)
+        deps = default_deps()
+        if deps.init_db is not None:
+            deps.init_db(settings.db_path)
         req = GenerateRequest(mode=mode, provider="live", force_llm=True)
-        resp = generate_once(req, settings)
+        resp = generate_once(req, settings, repo_factory=deps.repo_factory, guardrail=deps.guardrail)
         logger.info(
             _stable_json(
                 {

@@ -149,7 +149,7 @@ class TestLLMClient:
             mock_client = MagicMock()
             mock_client.chat.completions.create.side_effect = side_effect
             mock_openai.return_value = mock_client
-            with patch("agent_platform.agents.hsk30_tutor.llm_client.time.sleep"):
+            with patch("tenacity.nap.sleep"):
                 reply, backend = chat_completion(settings_with_llm, [{"role": "user", "content": "你好"}])
             assert backend == "llm"
             assert "成功" in reply

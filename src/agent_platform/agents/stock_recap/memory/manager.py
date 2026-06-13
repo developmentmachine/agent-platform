@@ -21,17 +21,8 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from agent_platform.infra.persistence.db import (
-    count_runs_since_last_evolution,
-    get_active_prompt_version,
-    insert_evolution_note,
-    load_evolution_history,
-    load_feedback_summary,
-    load_latest_evolution_note,
-    load_recent_runs,
-    load_runs_for_evolution,
-    set_active_prompt_version,
-)
+from agent_platform.core.utils import logged_errors, resolve_from_context, stable_json as _stable_json
+from agent_platform.core.ports.repository import RepositoryFactoryPort
 from agent_platform.agents.stock_recap.llm.prompts import PROMPT_BASE_VERSION, pattern_extraction_system
 from agent_platform.domain.models import EvolutionNote, Features, MarketSnapshot, Mode
 
@@ -41,7 +32,7 @@ logger = logging.getLogger("agent_platform.memory")
 _PROMPT_VERSION_CACHE_TTL_S = 5.0
 _cache_lock = threading.Lock()
 _cached_version: Optional[str] = None
-_cached_db_path: Optional[str] = None
+_cached_factory_key: Optional[str] = None
 _cached_at: float = 0.0
 
 
@@ -49,8 +40,13 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _stable_json(obj: Any) -> str:
-    return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+def _factory_cache_key(repo_factory: RepositoryFactoryPort) -> str:
+    """Derive a stable cache key from a repository factory.
+
+    For SqliteRepositoryFactory, uses ``db_path``; otherwise falls back to ``id()``.
+    """
+    return getattr(repo_factory, "db_path", None) or str(id(repo_factory))
+
 
 
 # ─── PROMPT_VERSION 管理（DB 事实源 + 短 TTL 缓存） ──────────────────────────────
@@ -59,54 +55,62 @@ def _default_initial_version() -> str:
     return f"{PROMPT_BASE_VERSION}.v1"
 
 
-def _resolve_prompt_version(db_path: str) -> str:
+@logged_errors("prompt_state_backfill_failed", reraise=False, logger_name="agent_platform.memory")
+def _backfill_prompt_state(repo_factory: RepositoryFactoryPort, recovered: str) -> None:
+    evo_repo = repo_factory.evolution_repository()
+    evo_repo.set_active_prompt_version(recovered, updated_at=_utc_now_iso())
+
+
+@logged_errors("prompt_state_init_failed", reraise=False, logger_name="agent_platform.memory")
+def _init_prompt_state(repo_factory: RepositoryFactoryPort, initial: str) -> None:
+    evo_repo = repo_factory.evolution_repository()
+    evo_repo.set_active_prompt_version(initial, updated_at=_utc_now_iso())
+
+
+def _resolve_prompt_version(repo_factory: RepositoryFactoryPort) -> str:
     """直接从 DB 解析活跃版本；prompt_state 为空则回退到最新 evolution_note，最后回退到 base 版本。"""
-    ver = get_active_prompt_version(db_path)
+    evo_repo = repo_factory.evolution_repository()
+    ver = evo_repo.get_active_prompt_version()
     if ver:
         return ver
 
-    note = load_latest_evolution_note(db_path)
+    note = evo_repo.load_latest_note()
     if note and note.get("prompt_version_suggested"):
         recovered = note["prompt_version_suggested"]
         # 把老库的 evolution_notes 数据回填到 prompt_state，让后续访问走快路径
-        try:
-            set_active_prompt_version(db_path, recovered, updated_at=_utc_now_iso())
-        except Exception as e:
-            logger.warning(_stable_json({"event": "prompt_state_backfill_failed", "error": str(e)}))
+        _backfill_prompt_state(repo_factory, recovered)
         return recovered
 
     initial = _default_initial_version()
-    try:
-        set_active_prompt_version(db_path, initial, updated_at=_utc_now_iso())
-    except Exception as e:
-        logger.warning(_stable_json({"event": "prompt_state_init_failed", "error": str(e)}))
+    _init_prompt_state(repo_factory, initial)
     return initial
 
 
-def get_prompt_version(db_path: str) -> str:
+def get_prompt_version(repo_factory: RepositoryFactoryPort) -> str:
     """获取当前活跃的 PROMPT_VERSION。
 
     线程安全；本地缓存 TTL=5s，过期后从 DB 重新解析；这保证：
     - 单 worker 下高频健康检查不会反复打 DB；
     - 多 worker 下 5s 内必定收敛到 DB 事实源。
     """
-    global _cached_version, _cached_db_path, _cached_at
+    global _cached_version, _cached_factory_key, _cached_at
+    fkey = _factory_cache_key(repo_factory)
 
     now = time.monotonic()
     with _cache_lock:
         if (
             _cached_version is not None
-            and _cached_db_path == db_path
+            and _cached_factory_key == fkey
             and (now - _cached_at) < _PROMPT_VERSION_CACHE_TTL_S
         ):
             return _cached_version
 
     # 出锁后查 DB（避免 DB 慢时阻塞其他读者）
-    version = _resolve_prompt_version(db_path)
+    version = _resolve_prompt_version(repo_factory)
 
     with _cache_lock:
         _cached_version = version
-        _cached_db_path = db_path
+        _cached_factory_key = fkey
         _cached_at = time.monotonic()
     return version
 
@@ -122,46 +126,40 @@ def _bump_prompt_version(current: str) -> str:
     return current + ".v2"
 
 
-def _set_prompt_version(db_path: str, version: str) -> None:
+def _set_prompt_version(repo_factory: RepositoryFactoryPort, version: str) -> None:
     """原子写入 prompt_state 并失效本地缓存。"""
-    global _cached_version, _cached_db_path, _cached_at
-    set_active_prompt_version(db_path, version, updated_at=_utc_now_iso())
+    global _cached_version, _cached_factory_key, _cached_at
+    fkey = _factory_cache_key(repo_factory)
+    evo_repo = repo_factory.evolution_repository()
+    evo_repo.set_active_prompt_version(version, updated_at=_utc_now_iso())
     with _cache_lock:
         _cached_version = version
-        _cached_db_path = db_path
+        _cached_factory_key = fkey
         _cached_at = time.monotonic()
     logger.info(_stable_json({"event": "prompt_version_bumped", "new_version": version}))
 
 
 def _invalidate_prompt_version_cache() -> None:
     """测试辅助：清空本地缓存，强制下次访问重新查 DB。"""
-    global _cached_version, _cached_db_path, _cached_at
+    global _cached_version, _cached_factory_key, _cached_at
     with _cache_lock:
         _cached_version = None
-        _cached_db_path = None
+        _cached_factory_key = None
         _cached_at = 0.0
 
 
 # ─── 基础记忆加载 ──────────────────────────────────────────────────────────────
 
 def _current_tenant_id() -> Optional[str]:
-    """从 ``current_run_context`` 读取 tenant_id（不存在则 None）。
+    """从 ``current_principal`` / ``domain.principal`` 读取 tenant_id（不存在则 None）。
 
     单租户 / CLI / 周期任务保持 None 行为兼容；HTTP 请求经过 ``require_api_key`` 后会有值。
     """
-    try:
-        from agent_platform.runtime.observability.runtime_context import current_run_context
-
-        ctx = current_run_context.get()
-        if ctx is not None:
-            return getattr(ctx, "tenant_id", None)
-    except Exception:
-        pass
-    return None
+    return resolve_from_context("tenant_id")
 
 
 def load_recent_memory(
-    db_path: str,
+    repo_factory: RepositoryFactoryPort,
     date: str,
     mode: Mode,
     limit: int = 5,
@@ -170,7 +168,8 @@ def load_recent_memory(
 ) -> List[Dict[str, Any]]:
     """取历史 recap 列表注入 LLM context（仅取摘要，避免 prompt 过长）。"""
     effective_tenant = tenant_id if tenant_id is not None else _current_tenant_id()
-    runs = load_recent_runs(db_path, date, mode, limit, tenant_id=effective_tenant)
+    run_repo = repo_factory.run_repository()
+    runs = run_repo.load_recent(date=date, mode=mode, limit=limit, tenant_id=effective_tenant)
     result = []
     for run in runs:
         recap = run.get("recap") or {}
@@ -199,7 +198,7 @@ def load_recent_memory(
 # ─── 市场模式提炼 ─────────────────────────────────────────────────────────────
 
 def extract_market_patterns(
-    db_path: str,
+    repo_factory: RepositoryFactoryPort,
     days: int,
     settings: Any,
     model_spec: Optional[str] = None,
@@ -213,10 +212,7 @@ def extract_market_patterns(
     其余情况（用户选了 gemini-cli/cursor-cli/ollama）直接跳过，避免无谓的
     『Model Not Exist』报错与重试浪费。
     """
-    from agent_platform.infra.llm.backends import (
-        call_llm,
-        llm_backend_effective,
-    )
+    from agent_platform.core.config.resolve import llm_backend_effective
 
     eff_backend = llm_backend_effective(model_spec, settings)
     if eff_backend != "openai" or not getattr(settings, "openai_api_key", None):
@@ -226,7 +222,8 @@ def extract_market_patterns(
         }))
         return None
 
-    runs = load_recent_runs(db_path, _today_str(), "daily", days, tenant_id=_current_tenant_id())
+    run_repo = repo_factory.run_repository()
+    runs = run_repo.load_recent(date=_today_str(), mode="daily", limit=days, tenant_id=_current_tenant_id())
     if len(runs) < 3:
         return None  # 历史数据不足，不提炼
 
@@ -248,22 +245,8 @@ def extract_market_patterns(
         {"role": "user", "content": "\n".join(summaries[-30:])},  # 最多取30条
     ]
 
+    # 直接用 openai 原始调用（不走 Recap schema 校验）
     try:
-        recap_obj, _ = call_llm(
-            settings=settings,
-            mode="daily",
-            messages=messages,
-            model_spec=None,
-        )
-        # 这里我们不用 Recap schema，直接拿原始文本
-        # 所以改用底层调用
-        raise NotImplementedError  # 触发 except 走文本路径
-    except Exception:
-        pass
-
-    # 直接用 openai/ollama 原始调用（不走 Recap schema 校验）
-    try:
-        from agent_platform.infra.llm.backends import _stable_json as sj
         import httpx
         from openai import OpenAI
 
@@ -290,16 +273,15 @@ def extract_market_patterns(
 
     return None
 
-
 def _today_str() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
-
 # ─── 进化注入（读取最新笔记注入 system prompt） ──────────────────────────────────
 
-def load_evolution_guidance(db_path: str) -> Optional[str]:
+def load_evolution_guidance(repo_factory: RepositoryFactoryPort) -> Optional[str]:
     """读取最新进化笔记，提炼为可注入 system prompt 的指导文字。"""
-    note = load_latest_evolution_note(db_path)
+    evo_repo = repo_factory.evolution_repository()
+    note = evo_repo.load_latest_note()
     if not note:
         return None
     notes_data = note.get("notes") or {}
@@ -316,7 +298,7 @@ def load_evolution_guidance(db_path: str) -> Optional[str]:
 # ─── 进化循环（核心） ─────────────────────────────────────────────────────────
 
 def check_and_run_evolution(
-    db_path: str,
+    repo_factory: RepositoryFactoryPort,
     settings: Any,
     trigger_run_id: Optional[str] = None,
     force: bool = False,
@@ -337,7 +319,7 @@ def check_and_run_evolution(
 
     # 进化目前完全依赖 OpenAI structured outputs（client.beta.chat.completions.parse），
     # 当用户主动选择非 openai backend 时直接跳过，避免 'Model Not Exist' 多次重试浪费。
-    from agent_platform.infra.llm.backends import llm_backend_effective
+    from agent_platform.core.config.resolve import llm_backend_effective
 
     eff_backend = llm_backend_effective(model_spec, settings)
     if eff_backend != "openai" or not getattr(settings, "openai_api_key", None):
@@ -348,7 +330,8 @@ def check_and_run_evolution(
         return None
 
     if not force:
-        since_last = count_runs_since_last_evolution(db_path)
+        run_repo = repo_factory.run_repository()
+        since_last = run_repo.count_since_last_evolution()
         if since_last < settings.evolution_min_runs:
             logger.debug(
                 _stable_json(
@@ -362,24 +345,25 @@ def check_and_run_evolution(
             return None
 
     logger.info(_stable_json({"event": "evolution_started", "trigger": trigger_run_id}))
-    try:
-        return _run_evolution(db_path, settings, trigger_run_id)
-    except Exception as e:
-        logger.warning(_stable_json({"event": "evolution_failed", "error": str(e)}))
-        return None
+    return _run_evolution(repo_factory, settings, trigger_run_id)
 
 
+@logged_errors("evolution_failed", reraise=False, logger_name="agent_platform.memory")
 def _run_evolution(
-    db_path: str,
+    repo_factory: RepositoryFactoryPort,
     settings: Any,
     trigger_run_id: Optional[str],
 ) -> Optional[str]:
     """实际执行进化分析：调用 LLM 分析历史质量，产出 EvolutionNote。"""
     from openai import OpenAI
 
-    runs = load_runs_for_evolution(db_path, limit=20)
-    feedback_summary = load_feedback_summary(db_path, limit=30)
-    evo_history = load_evolution_history(db_path, limit=3)
+    run_repo = repo_factory.run_repository()
+    feedback_repo = repo_factory.feedback_repository()
+    evo_repo = repo_factory.evolution_repository()
+
+    runs = run_repo.load_for_evolution(limit=20)
+    feedback_summary = feedback_repo.load_summary(limit=30)
+    evo_history = evo_repo.load_history(limit=3)
 
     if not runs:
         logger.info(_stable_json({"event": "evolution_no_data"}))
@@ -462,12 +446,11 @@ def _run_evolution(
             logger.warning(_stable_json({"event": "evolution_fallback_failed", "error": str(e2)}))
             return None
 
-    current_version = get_prompt_version(db_path)
+    current_version = get_prompt_version(repo_factory)
     new_version = _bump_prompt_version(current_version) if note.should_bump_version else None
     suggested_version = new_version or current_version
 
-    insert_evolution_note(
-        db_path,
+    evo_repo.insert_note(
         created_at=_utc_now_iso(),
         trigger_run_id=trigger_run_id,
         note=note,
@@ -475,7 +458,7 @@ def _run_evolution(
     )
 
     if new_version:
-        _set_prompt_version(db_path, new_version)
+        _set_prompt_version(repo_factory, new_version)
         logger.info(
             _stable_json(
                 {

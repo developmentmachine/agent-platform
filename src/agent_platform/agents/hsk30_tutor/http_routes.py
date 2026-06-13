@@ -17,7 +17,12 @@ from agent_platform.agents.hsk30_tutor.use_case import chat_turn
 from agent_platform.config.settings import Settings, get_settings
 from agent_platform.core.runtime.principal import PrincipalContext
 from agent_platform.core.runtime.run_context import RunContext
-from agent_platform.runtime.factory import create_runtime
+def _create_runtime(settings=None):
+    from agent_platform.runtime.factory import create_runtime as _factory_create
+    return _factory_create(settings)
+
+# Alias for test monkeypatching
+create_runtime = _create_runtime
 
 router = APIRouter(prefix="/v1/hsk30-tutor", tags=["hsk30-tutor"])
 

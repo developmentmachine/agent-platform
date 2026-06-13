@@ -149,6 +149,8 @@ def test_replay_from_audit_round_trip(tmp_path, monkeypatch, replay_provider):
     )
 
     # 3. 跑一次完整 pipeline（force_llm + 用 replay 后端）
+    from agent_platform.infra.persistence.factory import SqliteRepositoryFactory
+    rf = SqliteRepositoryFactory(settings.db_path)
     req = GenerateRequest(
         mode="daily",
         provider="mock",  # 数据用 mock，避免外网；LLM 由 replay 接管
@@ -157,7 +159,7 @@ def test_replay_from_audit_round_trip(tmp_path, monkeypatch, replay_provider):
         model="replay:fake",
         skip_trading_check=True,
     )
-    resp = generate_once(req, settings)
+    resp = generate_once(req, settings, repo_factory=rf)
 
     # 4. 断言：本次新 run 的 recap_json 与历史 audit 中的 recap 完全一致
     with get_conn(settings.db_path) as conn:

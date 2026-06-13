@@ -1,14 +1,25 @@
-"""后向兼容 shim：原 ``recap_support`` 已拆分到 ``application.side_effects/``。
+"""向后兼容 shim — 已拆分到 agents.stock_recap.effects。
 
-保留本文件只为了不让外部脚本/旧导入立刻断裂；新代码请直接 import
-``agent_platform.application.side_effects`` 或其子模块。
+.. deprecated::
+    请直接从 ``agent_platform.agents.stock_recap.effects`` 导入。
 """
 from __future__ import annotations
 
-from agent_platform.application.side_effects import (
+import warnings
+
+warnings.warn(
+    "agent_platform.application.recap_support is deprecated; "
+    "import from agent_platform.agents.stock_recap.effects instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+from agent_platform.agents.stock_recap.effects.backtest import (  # noqa: F401
     load_recent_backtests_simple,
-    run_deferred_post_recap,
     try_run_backtest,
+)
+from agent_platform.agents.stock_recap.effects.deferred import (  # noqa: F401
+    run_deferred_post_recap,
 )
 
 __all__ = [

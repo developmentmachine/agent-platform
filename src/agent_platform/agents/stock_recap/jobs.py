@@ -24,35 +24,25 @@ import logging
 import uuid
 from typing import Any, Dict, Optional
 
+from agent_platform.core.utils import stable_json as _stable_json
+from agent_platform.core.ports.repository import RepositoryFactoryPort
 from agent_platform.agents.stock_recap.use_case import generate_once
 from agent_platform.config.settings import Settings
 from agent_platform.domain.models import GenerateRequest
 from agent_platform.domain.principal import PrincipalContext, get_principal
 from agent_platform.domain.run_context import RunContext
-from agent_platform.infra.persistence.db import (
-    insert_job,
-    list_jobs,
-    load_job,
-    load_job_by_idem,
-    mark_job_done,
-    mark_job_failed,
-    update_job_running,
-)
-from agent_platform.runtime.observability.runtime_context import current_run_context
+from agent_platform.core.runtime.contextvars import current_run_context
 
 logger = logging.getLogger("agent_platform.agents.stock_recap.jobs")
 
 
-def _stable_json(obj: Any) -> str:
-    import json
-
-    return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def submit_recap_job(
     req: GenerateRequest,
     settings: Settings,
     *,
+    repo_factory: RepositoryFactoryPort,
     principal: Optional[PrincipalContext] = None,
     idempotency_key: Optional[str] = None,
     session_id: Optional[str] = None,
@@ -62,10 +52,10 @@ def submit_recap_job(
     幂等：``(tenant_id, idempotency_key)`` 命中已有 job 时，不会新建，原样返回旧 job。
     """
     tenant_id = (principal or get_principal()).tenant_id
+    job_repo = repo_factory.job_repository()
 
     if idempotency_key:
-        existing = load_job_by_idem(
-            settings.db_path,
+        existing = job_repo.load_by_idem(
             tenant_id=tenant_id,
             idempotency_key=idempotency_key,
         )
@@ -90,8 +80,7 @@ def submit_recap_job(
         "request": req.model_dump(),
         "session_id": session_id,
     }
-    inserted = insert_job(
-        settings.db_path,
+    inserted = job_repo.insert(
         job_id=job_id,
         kind="recap",
         request_payload=payload,
@@ -99,8 +88,7 @@ def submit_recap_job(
         idempotency_key=idempotency_key,
     )
     if not inserted and idempotency_key:
-        existing = load_job_by_idem(
-            settings.db_path,
+        existing = job_repo.load_by_idem(
             tenant_id=tenant_id,
             idempotency_key=idempotency_key,
         )
@@ -124,11 +112,11 @@ def submit_recap_job(
     )
     return {"job_id": job_id, "status": "queued", "idempotent_hit": False}
 
-
 def run_recap_job(
     job_id: str,
     settings: Settings,
     *,
+    repo_factory: RepositoryFactoryPort,
     principal: Optional[PrincipalContext] = None,
 ) -> None:
     """供 ``BackgroundTasks`` / 独立 worker 调用：执行单个 queued job。
@@ -136,7 +124,8 @@ def run_recap_job(
     幂等：重复调用会因 ``update_job_running`` 的 WHERE 条件被跳过；
     完成后更新 status 为 done/failed，附带 result/error。
     """
-    job = load_job(settings.db_path, job_id=job_id)
+    job_repo = repo_factory.job_repository()
+    job = job_repo.load(job_id=job_id)
     if job is None:
         logger.warning(_stable_json({"event": "job_not_found", "job_id": job_id}))
         return
@@ -156,15 +145,14 @@ def run_recap_job(
     try:
         req = GenerateRequest.model_validate(payload.get("request", {}))
     except Exception as e:
-        mark_job_failed(
-            settings.db_path,
+        job_repo.mark_failed(
             job_id=job_id,
             error=f"bad_request_payload: {e}",
         )
         return
     session_id = payload.get("session_id")
 
-    update_job_running(settings.db_path, job_id=job_id)
+    job_repo.update_running(job_id=job_id)
 
     # 让 worker 内的日志 / 工具 / 持久化读到正确的 principal + RunContext；
     # 结束后必须 reset principal，避免 BackgroundTasks 污染后续 HTTP 请求。
@@ -182,9 +170,8 @@ def run_recap_job(
     prev_ctx = current_run_context.get()
     current_run_context.set(ctx)
     try:
-        resp = generate_once(req, settings, ctx=ctx)
-        mark_job_done(
-            settings.db_path,
+        resp = generate_once(req, settings, ctx=ctx, repo_factory=repo_factory)
+        job_repo.mark_done(
             job_id=job_id,
             result_payload=resp.model_dump(),
             request_id=resp.request_id,
@@ -199,7 +186,7 @@ def run_recap_job(
             )
         )
     except Exception as e:
-        mark_job_failed(settings.db_path, job_id=job_id, error=str(e))
+        job_repo.mark_failed(job_id=job_id, error=str(e))
         logger.warning(
             _stable_json(
                 {
@@ -220,11 +207,13 @@ def run_recap_job(
 def get_job(
     settings: Settings,
     *,
+    repo_factory: RepositoryFactoryPort,
     job_id: str,
     tenant_id: Optional[str],
 ) -> Optional[Dict[str, Any]]:
     """API 层查询：按 tenant_id 隔离，返回精简后的 job 表示。"""
-    job = load_job(settings.db_path, job_id=job_id, tenant_id=tenant_id)
+    job_repo = repo_factory.job_repository()
+    job = job_repo.load(job_id=job_id, tenant_id=tenant_id)
     if job is None:
         return None
     return _project_job(job)
@@ -233,13 +222,14 @@ def get_job(
 def list_jobs_for_api(
     settings: Settings,
     *,
+    repo_factory: RepositoryFactoryPort,
     tenant_id: Optional[str],
     status: Optional[str] = None,
     limit: int = 50,
 ) -> list[Dict[str, Any]]:
     """与 ``GET /v1/jobs`` 对齐：同租户列表 + 字段投影。"""
-    rows = list_jobs(
-        settings.db_path,
+    job_repo = repo_factory.job_repository()
+    rows = job_repo.list(
         tenant_id=tenant_id,
         status=status,
         limit=limit,

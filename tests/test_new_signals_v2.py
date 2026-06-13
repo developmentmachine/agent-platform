@@ -99,6 +99,7 @@ def test_fetch_industry_5d_strength_with_fake_ak():
 def test_extract_market_patterns_skips_non_openai_backend():
     """gemini-cli backend 时不应触发 openai 调用。"""
     from agent_platform.agents.stock_recap.memory.manager import extract_market_patterns
+    from agent_platform.infra.persistence.factory import SqliteRepositoryFactory
 
     settings = SimpleNamespace(
         llm_backend="gemini-cli",
@@ -110,9 +111,10 @@ def test_extract_market_patterns_skips_non_openai_backend():
         gemini_api_key=None,
         pattern_extraction_days=5,
     )
+    rf = SqliteRepositoryFactory(":memory:")
     # 即便有 openai_api_key，因为 backend=gemini-cli，也必须返回 None 并跳过
     result = extract_market_patterns(
-        db_path=":memory:",
+        repo_factory=rf,
         days=5,
         settings=settings,
         model_spec="gemini-cli",
@@ -122,6 +124,7 @@ def test_extract_market_patterns_skips_non_openai_backend():
 
 def test_check_and_run_evolution_skips_non_openai_backend():
     from agent_platform.agents.stock_recap.memory.manager import check_and_run_evolution
+    from agent_platform.infra.persistence.factory import SqliteRepositoryFactory
 
     settings = SimpleNamespace(
         llm_backend="gemini-cli",
@@ -134,8 +137,9 @@ def test_check_and_run_evolution_skips_non_openai_backend():
         evolution_enabled=True,
         evolution_min_runs=10,
     )
+    rf = SqliteRepositoryFactory(":memory:")
     result = check_and_run_evolution(
-        db_path=":memory:",
+        repo_factory=rf,
         settings=settings,
         trigger_run_id=None,
         force=True,

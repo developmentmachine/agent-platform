@@ -9,6 +9,7 @@ import sys
 from datetime import datetime
 from typing import Any
 
+from agent_platform.core.utils import stable_json as _stable_json
 import uvicorn
 
 from agent_platform.agents.stock_recap.memory.manager import (
@@ -22,15 +23,11 @@ from agent_platform.config.settings import Settings
 from agent_platform.domain.models import GenerateRequest
 from agent_platform.agents.stock_recap.data.collector import collect_snapshot
 from agent_platform.agents.stock_recap.data.features import build_features
-from agent_platform.infra.llm.backends import llm_backend_effective, model_effective
+from agent_platform.core.config.resolve import llm_backend_effective, model_effective
 from agent_platform.agents.stock_recap.llm.prompts import build_messages
-from agent_platform.infra.persistence.db import load_feedback_summary, load_history
-from agent_platform.infra.push.wechat import test_push
 from agent_platform.core.services import start_scheduler
 
 
-def _stable_json(obj: Any) -> str:
-    return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def _today_str() -> str:
@@ -181,7 +178,12 @@ def _cmd_push_test(settings: Settings, logger: logging.Logger) -> int:
     if not settings.wxwork_webhook_url:
         print("错误：未配置 RECAP_WXWORK_WEBHOOK_URL", file=sys.stderr)
         return 1
-    ok = test_push(settings.wxwork_webhook_url)
+    from agent_platform.agents.stock_recap.deps import default_deps
+    deps = default_deps()
+    if deps.test_push is None:
+        print("错误：test_push 未配置", file=sys.stderr)
+        return 1
+    ok = deps.test_push(settings.wxwork_webhook_url)
     if ok:
         print("企业微信推送测试成功")
         return 0
@@ -213,7 +215,10 @@ def _cmd_backtest(
 def _cmd_history(
     settings: Settings, logger: logging.Logger, args: argparse.Namespace
 ) -> int:
-    items = load_history(settings.db_path, limit=args.limit)
+    from agent_platform.agents.stock_recap.deps import default_deps
+    deps = default_deps()
+    run_repo = deps.repo_factory.run_repository()
+    items = run_repo.load_history(limit=args.limit)
     print(f"\n最近 {len(items)} 条运行记录：\n")
     for item in items:
         status = "✓" if item["error"] is None else "✗"
@@ -246,7 +251,10 @@ def _cmd_generate(
         memory = load_recent_memory(settings.db_path, snapshot.date, req.mode)
         prompt_version = get_prompt_version(settings.db_path)
         evolution_guidance = load_evolution_guidance(settings.db_path)
-        feedback_summary = load_feedback_summary(settings.db_path)
+        from agent_platform.agents.stock_recap.deps import default_deps
+        deps = default_deps()
+        feedback_repo = deps.repo_factory.feedback_repository()
+        feedback_summary = feedback_repo.load_summary()
         messages = build_messages(
             mode=req.mode,
             snapshot=snapshot,

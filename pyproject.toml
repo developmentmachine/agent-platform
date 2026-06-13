@@ -4,6 +4,8 @@ version = "1.0.0"
 description = "Agent Platform：多智能体运行平台（CLI/HTTP/调度/IM）。内置 stock-recap（A 股日终复盘/次日策略）与 hsk30-tutor（HSK 3.0 中文陪练）。"
 requires-python = ">=3.10"
 dependencies = [
+    "agent-platform-core>=0.1.0",  # workspace member
+    "agent-platform-infra>=0.1.0",  # workspace member
     "akshare",
     "apscheduler>=3.10.0",
     "cryptography>=46.0.7",
@@ -69,6 +71,15 @@ dev = [
     "import-linter>=2.0",
 ]
 
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+agent-platform-core = { workspace = true }
+agent-platform-infra = { workspace = true }
+agent-platform-stock-recap = { workspace = true }
+agent-platform-hsk30-tutor = { workspace = true }
+
 [tool.uv]
 dev-dependencies = [
     "pytest>=8.0.0",
@@ -94,15 +105,9 @@ forbidden_modules = [
     "agent_platform.tools_server",
     "agent_platform.application",
 ]
-# 例外：core.runtime 暂从 ``domain`` re-export RunContext，待物理迁移后取消；
-# core.http / core.services 用惰性导入提供横切关注点（鉴权/调度/HTTP）。
+# 例外：core.runtime 暂从 ``domain`` re-export RunContext，待物理迁移后取消。
 ignore_imports = [
-    "agent_platform.core.runtime.contextvars -> agent_platform.runtime.observability.runtime_context",
     "agent_platform.core.runtime.run_context -> agent_platform.domain.run_context",
-    "agent_platform.core.http -> agent_platform.adapters.http.deps",
-    "agent_platform.core.services -> agent_platform.adapters.scheduler.jobs",
-    "agent_platform.core.services -> agent_platform.adapters.http.app",
-    "agent_platform.core.services -> agent_platform.adapters.cli.repl",
 ]
 
 [[tool.importlinter.contracts]]

@@ -10,6 +10,7 @@ import json
 import logging
 from typing import Any, Callable, Optional
 
+from agent_platform.core.utils import logged_errors, stable_json as _stable_json
 import httpx
 
 from agent_platform.domain.models import Recap
@@ -18,8 +19,6 @@ from agent_platform.infra.push import PushProvider
 logger = logging.getLogger("agent_platform.infra.push.wechat")
 
 
-def _stable_json(obj: Any) -> str:
-    return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 # 渲染函数类型：Recap -> str
@@ -120,21 +119,18 @@ def _send_wechat_text(url: str, content: str, timeout: int = 10) -> bool:
     return _post(url, payload, timeout)
 
 
+@logged_errors("wechat_http_error", reraise=False, fallback=False, logger_name="agent_platform.infra.push.wechat")
 def _post(url: str, payload: dict, timeout: int) -> bool:
-    try:
-        with httpx.Client(timeout=timeout) as client:
-            r = client.post(url, json=payload)
-            r.raise_for_status()
-            data = r.json()
-            ok = data.get("errcode") == 0
-            if not ok:
-                logger.warning(
-                    _stable_json({"event": "wechat_api_error", "resp": data})
-                )
-            return ok
-    except Exception as e:
-        logger.warning(_stable_json({"event": "wechat_http_error", "error": str(e)}))
-        return False
+    with httpx.Client(timeout=timeout) as client:
+        r = client.post(url, json=payload)
+        r.raise_for_status()
+        data = r.json()
+        ok = data.get("errcode") == 0
+        if not ok:
+            logger.warning(
+                _stable_json({"event": "wechat_api_error", "resp": data})
+            )
+        return ok
 
 
 def test_push(webhook_url: str) -> bool:

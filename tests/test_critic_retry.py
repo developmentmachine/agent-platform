@@ -25,7 +25,7 @@ from agent_platform.domain.models import (
     RecapDailySection,
 )
 from agent_platform.domain.run_context import RunContext
-from agent_platform.infra.llm import backends as backends_mod
+from agent_platform.infra.policy.guardrail_adapter import GuardrailAdapter
 
 
 def _settings(monkeypatch: pytest.MonkeyPatch, *, critic_max_retries: int = 1) -> Settings:
@@ -43,6 +43,8 @@ def _state_for_act(monkeypatch: pytest.MonkeyPatch, **settings_overrides) -> Rec
         settings=s,
         run_ctx=RunContext.new(),
         t0=time.time(),
+        guardrail=GuardrailAdapter(),
+        llm_caller=_make_sequenced_llm_caller(),
     )
     state.snapshot = MarketSnapshot(
         asof="2024-01-02T00:00:00+00:00", provider="mock", date="2024-01-02"
@@ -71,6 +73,16 @@ def _ok_recap() -> RecapDaily:
         closing_summary="震荡格局延续",
     )
 
+_current_provider = None
+
+
+def _make_sequenced_llm_caller():
+    """Return an llm_caller that delegates to the module-level _current_provider."""
+    def _caller(**kwargs):
+        assert _current_provider is not None, "set _current_provider before calling"
+        return _current_provider.call(**kwargs)
+    return _caller
+
 
 class _SequencedProvider:
     """按调用次序返回不同结果：先抛 schema 错，再返回合法 recap。"""
@@ -94,7 +106,8 @@ def test_critic_retry_recovers_after_schema_error(monkeypatch: pytest.MonkeyPatc
     initial_msgs = len(state.messages)
 
     provider = _SequencedProvider([LlmSchemaError("missing risks"), _ok_recap()])
-    monkeypatch.setattr(backends_mod, "resolve_provider", lambda _name: provider)
+    global _current_provider
+    _current_provider = provider
 
     pipeline_mod._phase_act(state, _NoopTracer())
 
@@ -114,7 +127,8 @@ def test_critic_retry_disabled_when_setting_zero(monkeypatch: pytest.MonkeyPatch
     initial_msgs = len(state.messages)
 
     provider = _SequencedProvider([LlmSchemaError("bad shape"), _ok_recap()])
-    monkeypatch.setattr(backends_mod, "resolve_provider", lambda _name: provider)
+    global _current_provider
+    _current_provider = provider
 
     pipeline_mod._phase_act(state, _NoopTracer())
 
@@ -136,14 +150,12 @@ def test_critic_retry_does_not_repeat_for_transport_error(monkeypatch: pytest.Mo
             LlmTransportError("network down"),
         ]
     )
-    monkeypatch.setattr(backends_mod, "resolve_provider", lambda _name: provider)
-    # 关掉 tenacity sleep 以加速
-    from agent_platform.infra.llm.backends import call_llm
-    call_llm.retry.sleep = lambda _s: None  # type: ignore[attr-defined]
+    global _current_provider
+    _current_provider = provider
 
     pipeline_mod._phase_act(state, _NoopTracer())
 
-    assert provider.calls == 3, "tenacity 重试 3 次后由 act 接住"
+    assert provider.calls == 1, "llm_caller 不含 tenacity，一次就停"
     assert state.recap is None
     assert state.llm_error and "network down" in state.llm_error
     assert state.critic_retries_used == 0, "传输错不计入 critic 重入"
@@ -162,7 +174,8 @@ def test_critic_retry_exhausts_when_business_keeps_failing(
             LlmSchemaError("v3 bad"),
         ]
     )
-    monkeypatch.setattr(backends_mod, "resolve_provider", lambda _name: provider)
+    global _current_provider
+    _current_provider = provider
 
     pipeline_mod._phase_act(state, _NoopTracer())
 

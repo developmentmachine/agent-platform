@@ -14,7 +14,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agent_platform.agents.stock_recap.experiments import select_variant
+from agent_platform.agents.stock_recap.deps import configure_default_deps, reset_default_deps
+from agent_platform.infra.persistence.factory import SqliteRepositoryFactory
 from agent_platform.config.settings import Settings
+from agent_platform.infra.policy.guardrail_adapter import GuardrailAdapter
 from agent_platform.infra.persistence.db import (
     get_conn,
     init_db,
@@ -24,6 +27,9 @@ from agent_platform.infra.persistence.db import (
     upsert_prompt_experiment,
     upsert_prompt_experiment_variant,
 )
+
+
+_noop_guardrail = GuardrailAdapter
 
 
 def _settings_via_env(tmp_path, monkeypatch) -> Settings:
@@ -75,7 +81,8 @@ def _seed_experiment(
 def test_select_variant_returns_none_when_no_experiment(tmp_path, monkeypatch):
     settings = _settings_via_env(tmp_path, monkeypatch)
     init_db(settings.db_path)
-    assert select_variant(settings.db_path, mode="daily", stickiness_key="abc") is None
+    rf = SqliteRepositoryFactory(settings.db_path)
+    assert select_variant(rf, mode="daily", stickiness_key="abc") is None
 
 
 def test_select_variant_returns_none_when_no_stickiness_key(tmp_path, monkeypatch):
@@ -87,8 +94,9 @@ def test_select_variant_returns_none_when_no_stickiness_key(tmp_path, monkeypatc
         mode="daily",
         variants=[("A", "vA", 1), ("B", "vB", 1)],
     )
-    assert select_variant(settings.db_path, mode="daily", stickiness_key=None) is None
-    assert select_variant(settings.db_path, mode="daily", stickiness_key="") is None
+    rf = SqliteRepositoryFactory(settings.db_path)
+    assert select_variant(rf, mode="daily", stickiness_key=None) is None
+    assert select_variant(rf, mode="daily", stickiness_key="") is None
 
 
 def test_select_variant_is_deterministic(tmp_path, monkeypatch):
@@ -100,8 +108,9 @@ def test_select_variant_is_deterministic(tmp_path, monkeypatch):
         mode="daily",
         variants=[("A", "vA", 1), ("B", "vB", 1)],
     )
-    a1 = select_variant(settings.db_path, mode="daily", stickiness_key="user-42")
-    a2 = select_variant(settings.db_path, mode="daily", stickiness_key="user-42")
+    rf = SqliteRepositoryFactory(settings.db_path)
+    a1 = select_variant(rf, mode="daily", stickiness_key="user-42")
+    a2 = select_variant(rf, mode="daily", stickiness_key="user-42")
     assert a1 is not None and a2 is not None
     assert a1.variant_id == a2.variant_id
     assert a1.prompt_version == a2.prompt_version
@@ -117,10 +126,11 @@ def test_select_variant_weight_distribution(tmp_path, monkeypatch):
         mode="daily",
         variants=[("A", "vA", 1), ("B", "vB", 9)],
     )
+    rf = SqliteRepositoryFactory(settings.db_path)
     counter: Counter[str] = Counter()
     for i in range(10000):
         a = select_variant(
-            settings.db_path, mode="daily", stickiness_key=f"k-{i}"
+            rf, mode="daily", stickiness_key=f"k-{i}"
         )
         assert a is not None
         counter[a.variant_id] += 1
@@ -140,9 +150,10 @@ def test_select_variant_zero_weight_excluded(tmp_path, monkeypatch):
         # B 权重为 0 应被 SQL 过滤掉，且 A 永远命中
         variants=[("A", "vA", 1), ("B", "vB", 0)],
     )
+    rf = SqliteRepositoryFactory(settings.db_path)
     for i in range(50):
         a = select_variant(
-            settings.db_path, mode="daily", stickiness_key=f"k-{i}"
+            rf, mode="daily", stickiness_key=f"k-{i}"
         )
         assert a is not None
         assert a.variant_id == "A"
@@ -158,8 +169,9 @@ def test_select_variant_paused_experiment_ignored(tmp_path, monkeypatch):
         variants=[("A", "vA", 1)],
         status="paused",
     )
+    rf = SqliteRepositoryFactory(settings.db_path)
     assert (
-        select_variant(settings.db_path, mode="daily", stickiness_key="x") is None
+        select_variant(rf, mode="daily", stickiness_key="x") is None
     )
 
 
@@ -237,6 +249,11 @@ def test_pipeline_persists_experiment_id_and_variant(tmp_path, monkeypatch):
     from agent_platform.agents.stock_recap.use_case import generate_once
     from agent_platform.domain.models import GenerateRequest
 
+    rf = SqliteRepositoryFactory(settings.db_path)
+    configure_default_deps(
+        repo_factory=rf,
+        guardrail=_noop_guardrail(),
+    )
     req = GenerateRequest(
         mode="daily",
         provider="mock",
@@ -244,7 +261,7 @@ def test_pipeline_persists_experiment_id_and_variant(tmp_path, monkeypatch):
         skip_trading_check=True,
         session_id="user-sticky-1",
     )
-    resp = generate_once(req, settings)
+    resp = generate_once(req, settings, repo_factory=rf)
 
     # recap_runs
     with get_conn(settings.db_path) as conn:
@@ -265,6 +282,8 @@ def test_pipeline_persists_experiment_id_and_variant(tmp_path, monkeypatch):
     assert audits[0]["experiment_id"] == "exp-e2e"
     assert audits[0]["variant_id"] == "only"
 
+    reset_default_deps()
+
 
 def test_pipeline_no_experiment_keeps_global_prompt_version(tmp_path, monkeypatch):
     """当 mode 没有 active 实验时，experiment_id/variant_id 应为 NULL。"""
@@ -281,10 +300,15 @@ def test_pipeline_no_experiment_keeps_global_prompt_version(tmp_path, monkeypatc
     from agent_platform.agents.stock_recap.use_case import generate_once
     from agent_platform.domain.models import GenerateRequest
 
+    rf = SqliteRepositoryFactory(settings.db_path)
+    configure_default_deps(
+        repo_factory=rf,
+        guardrail=_noop_guardrail(),
+    )
     req = GenerateRequest(
         mode="daily", provider="mock", force_llm=False, skip_trading_check=True
     )
-    resp = generate_once(req, settings)
+    resp = generate_once(req, settings, repo_factory=rf)
 
     with get_conn(settings.db_path) as conn:
         row = conn.execute(
@@ -293,6 +317,8 @@ def test_pipeline_no_experiment_keeps_global_prompt_version(tmp_path, monkeypatc
         ).fetchone()
     assert row["experiment_id"] is None
     assert row["variant_id"] is None
+
+    reset_default_deps()
 
 
 # ─── 4. /v1/experiments 端点 ───────────────────────────────────────────

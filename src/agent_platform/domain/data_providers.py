@@ -1,15 +1,13 @@
-"""市场数据采集 Provider 注册表（W5-4）。
+"""市场数据采集 Provider 注册表。
 
 与 ``LlmBackendRegistry`` 对称：domain 层只放 **类型与容器**，具体 ``collect_*``
- 实现留在 ``infrastructure/data/providers/``，由 ``builtin_data_providers`` 装配。
+实现由各 agent 或 infrastructure 层注册。
 
 扩展方式（运行时）：
-    from agent_platform.domain.data_providers import DataProviderSpec
-    from agent_platform.agents.stock_recap.data.collector import (
-        default_data_provider_registry,
-    )
+    from agent_platform.domain.data_providers import DataProviderSpec, DataProviderRegistry
 
-    default_data_provider_registry().register(
+    registry = DataProviderRegistry()
+    registry.register(
         DataProviderSpec(
             name="my-feed",
             collect=my_collect_fn,

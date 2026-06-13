@@ -21,6 +21,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
+from agent_platform.core.utils import resolve_from_context, stable_json as _stable_json
 from agent_platform.config.settings import Settings
 from agent_platform.core.ports.mcp_tool import McpClientPort, McpToolDescriptor
 from agent_platform.core.runtime.contextvars import current_budget, current_run_context
@@ -43,8 +44,6 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _stable_json(obj: Any) -> str:
-    return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 # Settings 中的「工具开关」与工具名映射（沿用历史命名）。
@@ -58,42 +57,20 @@ _SETTINGS_TOOL_FLAGS: Dict[str, str] = {
 def _resolve_principal_role(settings: Settings) -> str:
     """优先使用 ``current_principal.role``（W1 新增）；其次 ``domain.principal``；
     最后回落 ``Settings.principal_role``，与历史行为一致。"""
-    try:
-        from agent_platform.core.runtime.contextvars import current_principal
+    from agent_platform.core.runtime.contextvars import current_principal
 
-        principal = current_principal.get()
-        if principal is not None and (principal.role or "").strip():
-            return principal.role
-    except Exception:
-        pass
-    try:
-        from agent_platform.domain.principal import get_principal
-
-        role = (get_principal().role or "").strip()
-        if role:
-            return role
-    except Exception:
-        pass
+    result = resolve_from_context("role", principal_var=current_principal)
+    if result:
+        return result
     return settings.principal_role
 
 
 def _resolve_tenant_id() -> Optional[str]:
-    try:
-        from agent_platform.core.runtime.contextvars import current_principal
+    from agent_platform.core.runtime.contextvars import current_principal
 
-        principal = current_principal.get()
-        if principal is not None and principal.tenant_id:
-            return principal.tenant_id
-    except Exception:
-        pass
-    try:
-        from agent_platform.domain.principal import get_principal
-
-        tid = get_principal().tenant_id
-        if tid:
-            return tid
-    except Exception:
-        pass
+    result = resolve_from_context("tenant_id", principal_var=current_principal)
+    if result:
+        return result
     ctx = current_run_context.get()
     if ctx is not None:
         return getattr(ctx, "tenant_id", None)

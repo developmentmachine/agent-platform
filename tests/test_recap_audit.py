@@ -37,6 +37,22 @@ def _settings_via_env(tmp_path, monkeypatch, *, audit_enabled: bool = True) -> S
     return Settings()
 
 
+class _NoopGuardrail:
+    """Minimal GuardrailPort stub for tests."""
+    def validate_generate_request(self, req):
+        pass
+    def validate_feedback_request(self, req):
+        pass
+    def pre_input(self, text, **kw):
+        return text
+    def post_output(self, text, **kw):
+        return text
+    def clamp_messages(self, msgs, **kw):
+        return msgs
+    def coerce_recap_output(self, recap, *a, **kw):
+        return recap
+
+
 def _build_recap() -> RecapDaily:
     section = RecapDailySection(
         title="示例标题",
@@ -141,6 +157,7 @@ def test_pipeline_writes_audit_when_enabled(tmp_path, monkeypatch):
     monkeypatch.setenv("RECAP_AUDIT_ENABLED", "true")
 
     from agent_platform.agents.stock_recap.use_case import generate_once
+    from agent_platform.agents.stock_recap.deps import configure_default_deps, reset_default_deps
     import agent_platform.config.settings as _settings_mod
     _settings_mod._settings_instance = None  # noqa: SLF001
     settings = _settings_mod.Settings()
@@ -148,21 +165,27 @@ def test_pipeline_writes_audit_when_enabled(tmp_path, monkeypatch):
 
     from agent_platform.domain.models import GenerateRequest
 
-    req = GenerateRequest(
-        mode="daily",
-        provider="mock",
-        force_llm=False,
-        skip_trading_check=True,
-    )
-    resp = generate_once(req, settings)
-    rows = load_recap_audit(settings.db_path, request_id=resp.request_id)
-    assert len(rows) == 1
-    row = rows[0]
-    assert row["mode"] == "daily"
-    assert row["provider"] == "mock"
-    # force_llm=False 时不会有 LLM 调用，因此 messages 字段可能为 None / 空
-    assert row["llm_error"] is None
-    assert row["critic_retries_used"] == 0
+    from agent_platform.infra.persistence.factory import SqliteRepositoryFactory
+    rf = SqliteRepositoryFactory(settings.db_path)
+    configure_default_deps(repo_factory=rf, guardrail=_NoopGuardrail())
+    try:
+        req = GenerateRequest(
+            mode="daily",
+            provider="mock",
+            force_llm=False,
+            skip_trading_check=True,
+        )
+        resp = generate_once(req, settings, repo_factory=rf)
+        rows = load_recap_audit(settings.db_path, request_id=resp.request_id)
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["mode"] == "daily"
+        assert row["provider"] == "mock"
+        # force_llm=False 时不会有 LLM 调用，因此 messages 字段可能为 None / 空
+        assert row["llm_error"] is None
+        assert row["critic_retries_used"] == 0
+    finally:
+        reset_default_deps()
 
 
 def test_pipeline_skips_audit_when_disabled(tmp_path, monkeypatch):
@@ -172,6 +195,7 @@ def test_pipeline_skips_audit_when_disabled(tmp_path, monkeypatch):
     monkeypatch.setenv("RECAP_AUDIT_ENABLED", "false")
 
     from agent_platform.agents.stock_recap.use_case import generate_once
+    from agent_platform.agents.stock_recap.deps import configure_default_deps, reset_default_deps
     import agent_platform.config.settings as _settings_mod
     from agent_platform.domain.models import GenerateRequest
 
@@ -179,12 +203,18 @@ def test_pipeline_skips_audit_when_disabled(tmp_path, monkeypatch):
     settings = _settings_mod.Settings()
     init_db(settings.db_path)
 
-    req = GenerateRequest(
-        mode="daily", provider="mock", force_llm=False, skip_trading_check=True
-    )
-    resp = generate_once(req, settings)
-    rows = load_recap_audit(settings.db_path, request_id=resp.request_id)
-    assert rows == []
+    from agent_platform.infra.persistence.factory import SqliteRepositoryFactory
+    rf = SqliteRepositoryFactory(settings.db_path)
+    configure_default_deps(repo_factory=rf, guardrail=_NoopGuardrail())
+    try:
+        req = GenerateRequest(
+            mode="daily", provider="mock", force_llm=False, skip_trading_check=True
+        )
+        resp = generate_once(req, settings, repo_factory=rf)
+        rows = load_recap_audit(settings.db_path, request_id=resp.request_id)
+        assert rows == []
+    finally:
+        reset_default_deps()
 
 
 def test_audit_endpoint_get_by_id(tmp_path, monkeypatch):

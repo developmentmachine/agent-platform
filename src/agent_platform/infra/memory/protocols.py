@@ -13,25 +13,28 @@ class EmbeddingProvider(Protocol):
 
 @runtime_checkable
 class VectorStore(Protocol):
-    """向量写入与相似度检索（带 metadata 过滤）。"""
+    """向量写入与相似度检索（带 metadata 过滤）。
 
-    def ensure_collection(self, *, vector_size: int) -> None: ...
+    签名与 ``agent_platform.core.ports.memory.VectorStorePort`` 保持一致。
+    """
 
     def upsert(
         self,
+        items: Sequence[Dict[str, Any]],
         *,
-        points: List[Dict[str, Any]],
+        collection: Optional[str] = None,
     ) -> None:
-        """points: [{\"id\": str, \"vector\": list[float], \"payload\": dict}, ...]"""
+        """items: [{"id": str, "vector": list[float], "payload": dict}, ...]"""
 
     def query(
         self,
-        *,
         vector: Sequence[float],
-        limit: int,
-        filter_must: Optional[Dict[str, Any]] = None,
+        *,
+        top_k: int = 5,
+        collection: Optional[str] = None,
+        filter: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
-        """返回 [{\"id\", \"score\", \"payload\"}, ...]"""
+        """返回 ``[{id, score, payload}, ...]``。"""
 
 
 __all__ = ["EmbeddingProvider", "VectorStore"]

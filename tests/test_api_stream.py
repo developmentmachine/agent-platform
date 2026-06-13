@@ -9,13 +9,46 @@ from agent_platform.domain.models import GenerateRequest
 from agent_platform.adapters.http.routes import app
 
 
+class _NoopGuardrail:
+    """Minimal guardrail stub for tests that don't exercise guardrails."""
+
+    def validate_generate_request(self, req):  # noqa: ANN001
+        pass
+
+    def validate_feedback_request(self, req):  # noqa: ANN001
+        pass
+
+    def pre_input(self, text, **kw):  # noqa: ANN001
+        return text
+
+    def post_output(self, text, **kw):  # noqa: ANN001
+        return text
+
+    def clamp_messages(self, msgs, **kw):  # noqa: ANN001
+        return msgs
+
+    def coerce_recap_output(self, recap, *a, **kw):  # noqa: ANN001
+        return recap
+
+
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> TestClient:
     settings_module._settings_instance = None
-    monkeypatch.setenv("RECAP_DB_PATH", ":memory:")
+    db = str(tmp_path / "api_stream.db")
+    monkeypatch.setenv("RECAP_DB_PATH", db)
     monkeypatch.delenv("RECAP_API_KEY", raising=False)
     monkeypatch.delenv("RECAP_OTEL_ENABLED", raising=False)
-    return TestClient(app)
+
+    from agent_platform.infra.persistence.db import init_db
+    from agent_platform.infra.persistence.factory import SqliteRepositoryFactory
+    from agent_platform.agents.stock_recap.deps import configure_default_deps, reset_default_deps
+    from agent_platform.infra.policy.guardrail_adapter import GuardrailAdapter
+
+    init_db(db)
+    rf = SqliteRepositoryFactory(db)
+    configure_default_deps(repo_factory=rf, guardrail=GuardrailAdapter())
+    yield TestClient(app)
+    reset_default_deps()
 
 
 def test_recap_stream_ndjson_phases_and_result(client: TestClient) -> None:

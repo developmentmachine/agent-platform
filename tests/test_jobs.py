@@ -5,20 +5,51 @@ import pytest
 from fastapi.testclient import TestClient
 
 import agent_platform.config.settings as settings_module
+from agent_platform.adapters.http.deps import _reset_limiter_for_tests
 from agent_platform.infra.persistence.db import init_db, upsert_tenant
 from agent_platform.adapters.http.routes import app
+
+
+class _NoopGuardrail:
+    """Minimal guardrail stub for tests that don't exercise guardrails."""
+
+    def validate_generate_request(self, req):  # noqa: ANN001
+        pass
+
+    def validate_feedback_request(self, req):  # noqa: ANN001
+        pass
+
+    def pre_input(self, text, **kw):  # noqa: ANN001
+        return text
+
+    def post_output(self, text, **kw):  # noqa: ANN001
+        return text
+
+    def clamp_messages(self, msgs, **kw):  # noqa: ANN001
+        return msgs
+
+    def coerce_recap_output(self, recap, *a, **kw):  # noqa: ANN001
+        return recap
 
 
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> TestClient:
     settings_module._settings_instance = None
+    _reset_limiter_for_tests()
     db = str(tmp_path / "jobs_api.db")
     monkeypatch.setenv("RECAP_DB_PATH", db)
     monkeypatch.setenv("RECAP_RATE_LIMIT_RPM", "10000")
     monkeypatch.delenv("RECAP_API_KEY", raising=False)
     monkeypatch.delenv("RECAP_OTEL_ENABLED", raising=False)
     init_db(db)
-    return TestClient(app)
+
+    from agent_platform.infra.persistence.factory import SqliteRepositoryFactory
+    from agent_platform.agents.stock_recap.deps import configure_default_deps, reset_default_deps
+
+    rf = SqliteRepositoryFactory(db)
+    configure_default_deps(repo_factory=rf, guardrail=_NoopGuardrail())
+    yield TestClient(app)
+    reset_default_deps()
 
 
 def _post_job(client: TestClient, **headers: str):
@@ -78,11 +109,18 @@ def test_jobs_list_filter_by_status(client: TestClient) -> None:
 
 def test_jobs_tenant_isolation(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     settings_module._settings_instance = None
+    _reset_limiter_for_tests()
     db = str(tmp_path / "jobs_mt.db")
     monkeypatch.setenv("RECAP_DB_PATH", db)
     monkeypatch.setenv("RECAP_RATE_LIMIT_RPM", "10000")
     monkeypatch.delenv("RECAP_API_KEY", raising=False)
     init_db(db)
+
+    from agent_platform.infra.persistence.factory import SqliteRepositoryFactory
+    from agent_platform.agents.stock_recap.deps import configure_default_deps, reset_default_deps
+
+    rf = SqliteRepositoryFactory(db)
+    configure_default_deps(repo_factory=rf, guardrail=_NoopGuardrail())
 
     import hashlib
 
@@ -109,23 +147,26 @@ def test_jobs_tenant_isolation(tmp_path, monkeypatch: pytest.MonkeyPatch) -> Non
     from agent_platform.config.settings import Settings, get_settings
     from agent_platform.adapters.http.app import create_app
 
-    settings_module._settings_instance = None
-    settings_one = Settings()
-    app_mt = create_app()
-    app_mt.dependency_overrides[get_settings] = lambda: settings_one
+    try:
+        settings_module._settings_instance = None
+        settings_one = Settings()
+        app_mt = create_app()
+        app_mt.dependency_overrides[get_settings] = lambda: settings_one
 
-    c1 = TestClient(app_mt)
-    r1 = c1.post(
-        "/v1/jobs",
-        json={"mode": "daily", "provider": "mock", "force_llm": False},
-        headers={"X-API-Key": "ka"},
-    )
-    assert r1.status_code == 200
-    job_a = r1.json()["job_id"]
+        c1 = TestClient(app_mt)
+        r1 = c1.post(
+            "/v1/jobs",
+            json={"mode": "daily", "provider": "mock", "force_llm": False},
+            headers={"X-API-Key": "ka"},
+        )
+        assert r1.status_code == 200
+        job_a = r1.json()["job_id"]
 
-    c2 = TestClient(app_mt)
-    nf = c2.get(f"/v1/jobs/{job_a}", headers={"X-API-Key": "kb"})
-    assert nf.status_code == 404
+        c2 = TestClient(app_mt)
+        nf = c2.get(f"/v1/jobs/{job_a}", headers={"X-API-Key": "kb"})
+        assert nf.status_code == 404
 
-    app_mt.dependency_overrides.clear()
-    settings_module._settings_instance = None
+        app_mt.dependency_overrides.clear()
+        settings_module._settings_instance = None
+    finally:
+        reset_default_deps()

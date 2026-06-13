@@ -1,11 +1,12 @@
 """策略层：工具治理 + 输出护栏 + 输入校验。"""
 from agent_platform.infra.policy.guardrails import (
-    GuardrailError,
     clamp_llm_messages,
     coerce_recap_output,
     validate_feedback_request,
     validate_generate_request,
 )
+from agent_platform.core.ports.guardrail import GuardrailError
+from agent_platform.infra.policy.guardrail_adapter import GuardrailAdapter
 from agent_platform.infra.policy.output_rules import RuleSet, Violation, apply_rules, load_ruleset
 from agent_platform.infra.policy.tools import (
     ToolBudgetExceeded,
@@ -20,6 +21,7 @@ from agent_platform.infra.policy.tools import (
 )
 
 __all__ = [
+    "GuardrailAdapter",
     "GuardrailError",
     "RuleSet",
     "ToolBudgetExceeded",

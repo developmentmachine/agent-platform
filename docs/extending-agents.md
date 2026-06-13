@@ -1,7 +1,8 @@
 # 扩展新 Agent 指导手册
 
-> **v2 平台化架构**：新 Agent 必须放在 `src/agent_platform/agents/<id>/`，通过 `AgentDefinition` + `manifest.register` 接入。  
-> 完整分层见 [`ARCHITECTURE.md`](./ARCHITECTURE.md)。内置示例：`stock-recap`、`hsk30-tutor`。
+> **v2 平台化架构**：新 Agent 必须放在 `src/agent_platform/agents/<id>/`，通过 `AgentDefinition` + `manifest.register` 接入。
+> 完整分层见 [`ARCHITECTURE.md`](./ARCHITECTURE.md)。打包指南见 [`packaging.md`](./packaging.md)。
+> 内置示例：`stock-recap`、`hsk30-tutor`。
 
 ---
 
@@ -11,12 +12,14 @@
 1) 新建 src/agent_platform/agents/<id>/（models · use_case · manifest.py）
 2) 实现 runner（或 Pipeline[StateT] + Phase 子类）
 3) manifest.py：reg.register(AgentDefinition(...))
-4) runtime/factory.py → register_builtin_agents 加一行
-   （可选：pyproject [project.entry-points."agent_platform.agents"])
+4) pyproject.toml 声明 entry_points（自动发现，无需改 factory.py）
 5) pytest + uv run lint-imports
 ```
 
-在 manifest 中声明 `cli_subparser_factory` / `cli_run_handler` 后，CLI 子命令自动出现；声明 `http_router_factories` 后，`stock-recap --serve` 启动的 API 会自动挂载路由。**无需修改** `adapters/cli/main.py`。
+**关键原则**：
+- Agent 只依赖 `core.*`（端口协议），不直接 import `infra.*`
+- infra 实现通过 `deps.py` DI 容器注入
+- entry_points 自动发现 — 安装 wheel 后无需改任何平台文件
 
 ---
 
@@ -24,14 +27,13 @@
 
 | 层 | 路径 | 新 Agent 时 |
 |----|------|-------------|
-| `core/` | 契约、Pipeline、Registry | **不改** |
-| `runtime/` | `factory.create_runtime` | 仅在 `register_builtin_agents` 加一行 |
-| `infra/` | LLM、DB、MCP client | 一般不改 |
-| `tools_server/` | MCP 工具 | 仅加新工具时改 |
-| `agents/<id>/` | 业务代码 | ✅ 全部在这里 |
+| `core/` | 端口协议、Pipeline、Registry、AgentApp | **不改** |
+| `infra/` | LLM、DB、MCP client、Push、Guardrail | 一般不改 |
+| `agents/<id>/` | 业务代码 + deps.py + manifest.py | ✅ 全部在这里 |
 | `adapters/` | CLI / HTTP / QQ / 调度 | 一般不改 |
 
 **Agent 之间禁止互相 import**（`import-linter` 强制）。
+**Agent → infra 禁止模块级 import**（全部通过 DI / 函数内 lazy import）。
 
 ---
 
@@ -39,12 +41,13 @@
 
 | Agent | 目录 | 能力 | 要点 |
 |-------|------|------|------|
-| `stock-recap` | `agents/stock_recap/` | REPORT, STREAMING, SCHEDULED, TOOL_USING | Phase pipeline、skills、MCP 工具名、定时任务 |
-| `hsk30-tutor` | `agents/hsk30_tutor/` | CHAT, STREAMING | 轻量 `chat_completion`、字词约束验证、自动重试修正、装饰器模式、交互 REPL、`POST /v1/hsk30-tutor/chat` |
+| `stock-recap` | `agents/stock_recap/` | REPORT, STREAMING, SCHEDULED, TOOL_USING | Phase pipeline、skills、MCP、DI 容器（deps.py）、定时任务 |
+| `hsk30-tutor` | `agents/hsk30_tutor/` | CHAT, STREAMING | 轻量 `chat_completion`、字词约束验证、自动重试修正、装饰器模式 |
 
-阅读顺序：`manifest.py` → `use_case.py`（或 `pipeline_v2.py`）→ `cli.py` → `http_routes.py`。
+阅读顺序：`manifest.py` → `deps.py`（如有）→ `use_case.py` → `cli.py` → `http_routes.py`。
 
-> **hsk30-tutor 是纯业务 Agent 的最佳参考**：只依赖 `core.*` + `config.*`，不碰 `infra.*`；内部依赖图是干净的 DAG（无环）；使用装饰器消除模板代码。
+> **hsk30-tutor 是纯业务 Agent 的最佳参考**：只依赖 `core.*` + `config.*`，不碰 `infra.*`。
+> **stock-recap 是复杂 Agent 的参考**：DI 容器、Phase pipeline、MCP 工具、定时任务。
 
 ---
 
@@ -56,6 +59,7 @@
 from agent_platform.core.registry.agent_definition import (
     AgentCapability,
     AgentDefinition,
+    AgentResponseEnvelope,
 )
 from agent_platform.core.registry.agent_registry import AgentRegistry
 
@@ -64,7 +68,13 @@ AGENT_ID = "my-agent"
 
 def _runner(*, envelope, principal, session, run_ctx, settings, runtime):
     # envelope.payload → 业务逻辑 → AgentResponseEnvelope
-    ...
+    req = MyRequest.model_validate(envelope.payload)
+    # ... 业务逻辑 ...
+    return AgentResponseEnvelope(
+        agent_id=AGENT_ID,
+        request_id=run_ctx.request_id,
+        payload={"answer": answer},
+    )
 
 
 def register(registry: AgentRegistry) -> None:
@@ -77,52 +87,215 @@ def register(registry: AgentRegistry) -> None:
             response_model=MyResponse,
             capabilities=[AgentCapability.CHAT],
             runner=_runner,
-            mcp_tool_names=[],  # 无工具
+            mcp_tool_names=[],
             cli_help="一句话 help",
             http_path_prefix="/v1/my-agent",
-            # 懒加载 CLI/HTTP，避免 manifest.py 导入业务模块
             cli_subparser_factory=lambda sub: __import__(
-                "my_agent.cli", fromlist=["register_subparser"]
+                "agent_platform.agents.my_agent.cli", fromlist=["register_subparser"]
             ).register_subparser(sub),
             cli_run_handler=lambda args, s, p: __import__(
-                "my_agent.cli", fromlist=["run"]
+                "agent_platform.agents.my_agent.cli", fromlist=["run"]
             ).run(args, s, p),
             http_router_factories=[lambda: [__import__(
-                "my_agent.http_routes", fromlist=["router"]
+                "agent_platform.agents.my_agent.http_routes", fromlist=["router"]
             ).router]],
         )
     )
 ```
 
-`use_case` 入口须激活 `AgentScope`（推荐用装饰器消除模板代码）：
+### 3.2 带 DI 容器的 Agent（stock-recap 模式）
+
+当 Agent 需要访问 infra 实现（数据库、LLM、Push 等）时，**必须通过 DI 容器注入**：
 
 ```python
-from agent_platform.runtime.scope import agent_execution
+# agents/my_agent/deps.py — 依赖注入容器
+from dataclasses import dataclass
+from typing import Optional, Callable
+from agent_platform.core.ports.repository import RepositoryFactoryPort
+from agent_platform.core.ports.guardrail import GuardrailPort
 
-# 方式一：上下文管理器
-def chat_turn(req, settings, *, ctx=None):
-    with agent_execution(_definition_for_registry()):
-        ...
 
-# 方式二：装饰器（推荐，见 hsk30-tutor 实现）
-def _with_agent_scope(fn):
-    @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
-        scope = AgentScope(agent_id=AGENT_ID, ...)
-        token = current_agent_scope.set(scope)
-        try:
-            return fn(*args, **kwargs)
-        finally:
-            current_agent_scope.reset(token)
-    return wrapper
+@dataclass
+class MyAgentDeps:
+    repo_factory: RepositoryFactoryPort
+    guardrail: GuardrailPort
+    llm_caller: Optional[Callable] = None
+    init_db: Optional[Callable[[str], None]] = None
 
-@_with_agent_scope
-def chat_turn(req, settings, *, ctx=None):
-    # 直接写业务逻辑，不需要手动管理 scope
-    ...
+
+_default: Optional[MyAgentDeps] = None
+
+
+def configure_default_deps(*, repo_factory, guardrail, llm_caller=None, init_db=None):
+    global _default
+    _default = MyAgentDeps(
+        repo_factory=repo_factory,
+        guardrail=guardrail,
+        llm_caller=llm_caller,
+        init_db=init_db,
+    )
+
+
+def default_deps() -> MyAgentDeps:
+    if _default is not None:
+        return _default
+    raise RuntimeError(
+        "My agent deps not configured. "
+        "Call configure_default_deps() from the bootstrap entry point."
+    )
+
+
+def reset_default_deps():
+    global _default
+    _default = None
 ```
 
-### 3.2 带 MCP + Skill bundle（报告 / 工具型）
+```python
+# agents/my_agent/use_case.py — 业务逻辑（只用端口，不用 infra）
+from agent_platform.agents.my_agent.deps import default_deps
+
+
+def do_something(req, settings):
+    deps = default_deps()
+    repo = deps.repo_factory.run_repository()
+    # ... 业务逻辑 ...
+    # LLM 调用通过注入的 llm_caller
+    if deps.llm_caller:
+        answer, tokens = deps.llm_caller(
+            settings=settings, mode=req.mode, messages=messages,
+        )
+```
+
+```python
+# monolith bootstrap（CLI / HTTP 入口）— 只在这里 import infra
+from agent_platform.agents.my_agent.deps import configure_default_deps
+from agent_platform.infra.persistence.factory import SqliteRepositoryFactory
+from agent_platform.infra.policy.guardrails import GuardrailAdapter
+from agent_platform.infra.persistence.db import init_db
+from agent_platform.infra.llm.backends import call_llm
+
+configure_default_deps(
+    repo_factory=SqliteRepositoryFactory(db_path),
+    guardrail=GuardrailAdapter(),
+    llm_caller=lambda **kw: call_llm(**kw),
+    init_db=init_db,
+)
+```
+
+**原则**：`infra.*` 的 import 只出现在 monolith bootstrap 入口，不出现在 agent 业务代码中。
+
+---
+
+## 四、依赖注入（DI）模式详解
+
+### 4.1 端口协议（core/ports/）
+
+Agent 通过端口协议与 infra 解耦：
+
+| 端口 | 用途 | 位置 |
+|------|------|------|
+| `LlmBackendPort` | LLM 调用 | `core/ports/llm.py` |
+| `RepositoryFactoryPort` | 数据库访问（6 个 repo） | `core/ports/repository.py` |
+| `GuardrailPort` | 输入/输出护栏 | `core/ports/guardrail.py` |
+| `PushPort` | 消息推送 | `core/ports/push.py` |
+| `EmbeddingsPort` | 文本向量化 | `core/ports/memory.py` |
+| `VectorStorePort` | 向量存储 | `core/ports/memory.py` |
+| `MetricsPort` | 指标采集 | `core/ports/metrics.py` |
+| `SessionResolverPort` | 会话解析 | `core/ports/session.py` |
+| `RendererPort` | 内容渲染 | `core/ports/renderer.py` |
+| `McpClientPort` | MCP 工具调用 | `core/ports/mcp_tool.py` |
+
+### 4.2 注入方式
+
+```python
+# 方式一：deps 单例（stock-recap 模式）
+deps = default_deps()
+repo = deps.repo_factory.run_repository()
+
+# 方式二：函数参数传递
+def generate_once(req, settings, *, repo_factory=None, guardrail=None):
+    rf = repo_factory or default_deps().repo_factory
+    gr = guardrail or default_deps().guardrail
+
+# 方式三：AgentApp（独立运行模式）
+app = AgentApp(agent_id="my-agent", llm=my_llm, repo_factory=my_repo)
+result = app.run(payload={...})
+```
+
+---
+
+## 五、独立打包
+
+### 5.1 创建包目录
+
+```bash
+mkdir -p packages/my-agent
+cd packages/my-agent
+ln -s ../../../src/agent_platform src/agent_platform
+```
+
+### 5.2 pyproject.toml
+
+```toml
+[project]
+name = "agent-platform-my-agent"
+version = "0.1.0"
+dependencies = [
+    "agent-platform-core>=0.1.0",
+    "agent-platform-infra>=0.1.0",
+]
+
+[project.entry-points."agent_platform.agents"]
+my-agent = "agent_platform.agents.my_agent.manifest:register"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_platform"]
+only-include = ["src/agent_platform/agents/my_agent"]
+```
+
+### 5.3 构建 + 验证
+
+```bash
+uv build --no-cache
+# → dist/agent_platform_my_agent-0.1.0-py3-none-any.whl
+
+# 验证 entry_points
+python3 -c "
+import zipfile
+with zipfile.ZipFile('dist/agent_platform_my_agent-0.1.0-py3-none-any.whl') as z:
+    for name in z.namelist():
+        if 'entry_points' in name:
+            print(z.read(name).decode())
+"
+# 应输出:
+# [agent_platform.agents]
+# my-agent = agent_platform.agents.my_agent.manifest:register
+```
+
+### 5.4 独立安装
+
+```bash
+pip install agent-platform-core agent-platform-infra
+pip install dist/agent_platform_my_agent-0.1.0-py3-none-any.whl
+
+# 自动发现
+python3 -c "
+from importlib.metadata import entry_points
+eps = entry_points(group='agent_platform.agents')
+for ep in eps:
+    print(f'{ep.name} → {ep.value}')
+"
+```
+
+详细打包流程见 [`docs/packaging.md`](./packaging.md)。
+
+---
+
+## 六、带 MCP + Skill bundle 的 Agent
 
 **目录**（示例）：
 
@@ -145,7 +318,7 @@ agents/my_agent/
 }
 ```
 
-`pyproject.toml`（与 `stock-recap` 相同模式）：
+注册 entry_points：
 
 ```toml
 [project.entry-points."agent_platform.agents"]
@@ -155,207 +328,104 @@ my-agent = "agent_platform.agents.my_agent.manifest:register"
 my-agent = "agent_platform.agents.my_agent.skills:bundle_root"
 ```
 
-`agents/my_agent/skills/__init__.py`：
-
-```python
-from pathlib import Path
-
-def bundle_root() -> Path:
-    return Path(__file__).resolve().parent
-```
-
-`manifest.py`：
-
-```python
-from agent_platform.agents.my_agent.skills import bundle_root
-from agent_platform.core.registry.agent_definition import (
-    AgentCapability,
-    AgentDefinition,
-)
-from agent_platform.core.registry.agent_registry import AgentRegistry
-from agent_platform.skills.bundle import with_skill_bundle
-
-AGENT_ID = "my-agent"
-
-
-def _runner(*, envelope, principal, session, run_ctx, settings, runtime):
-    ...
-
-
-def _build_definition() -> AgentDefinition:
-    defn = AgentDefinition(
-        id=AGENT_ID,
-        display_name="My Agent",
-        description="...",
-        request_model=MyRequest,
-        response_model=MyResponse,
-        capabilities=[AgentCapability.REPORT, AgentCapability.TOOL_USING],
-        runner=_runner,
-        mcp_tool_names=["web_search"],  # ⊆ tools_server 全局池
-        cli_help="...",
-        http_path_prefix="/v1/my-agent",
-        cli_subparser_factory=_cli_subparser,
-        cli_run_handler=_cli_run,
-        http_router_factories=[lambda: [my_router]],
-    )
-    return with_skill_bundle(
-        defn,
-        bundle_key="my-agent",       # 与 entry_point 名一致
-        bundle_root=bundle_root(),
-    )
-
-
-def register(registry: AgentRegistry) -> None:
-    registry.register(_build_definition())
-```
-
-构建 prompt 时用 `load_skill_overlay_for_mode(mode)`（要求当前线程已 `agent_execution`）；**不要**手写 `skills=[...]`。
-
-### 3.3 注册与校验
-
-- `create_runtime()` 会注入 `validate_agent_dependencies`：`register()` 前检查 MCP/skill 声明 ⊆ 全局池，且与 bundle 解析结果一致。
-- 运行期：`AgentScope` = 平台已启用工具 ∩ `mcp_tool_names`；skill overlay = 本 Agent 的 `skill_mode_map`（见 [ARCHITECTURE.md §6.2](ARCHITECTURE.md)）。
-
-注册后验证：
-
-```bash
-uv run agent-platform --list-agents
-uv run agent-platform my-agent --help
-```
-
 ---
 
-## 四、Skills / MCP / Prompts
+## 七、HTTP / CLI / Scheduler
 
-### 4.1 MCP 工具
-
-1. 在 `tools_server/tools/` 增加 `SPEC`，由 `tools_server/registry.py` 聚合（**全局池**）。
-2. 在 `AgentDefinition` 声明 `mcp_tool_names=[...]`（该 Agent 允许的工具子集）。
-3. 运行期：`AgentScope` 将暴露给 LLM 的工具裁成 **平台已启用 ∩ mcp_tool_names**（`create_runtime` → `agent_execution` / `generate_once` / `AgentRuntime.run` 内激活）。
-
-无 skill、无工具的 Agent（如 `hsk30-tutor`）保持 `mcp_tool_names=[]` 即可。
-
-### 4.2 Skills（bundle）
-
-| 写什么 | 位置 |
-|--------|------|
-| **Skill id（唯一真源）** | 各 `SKILL.md` frontmatter 的 `name:` |
-| **文件路径** | `agents/<id>/skills/manifest.json` → `skills[].path` |
-| **mode → skill** | 同 manifest 的 `mode_to_skill_id`（值必须等于某条 `SKILL.md` 的 `name`） |
-| **禁止** | 在 manifest 里写 `id` 字段（加载时报错） |
-
-注册时：
-
-```python
-from agent_platform.skills.bundle import with_skill_bundle
-
-reg.register(
-    with_skill_bundle(
-        AgentDefinition(..., mcp_tool_names=[...]),
-        bundle_key="my-agent",  # 与 pyproject entry_point 名一致
-    )
-)
-```
-
-运行期 overlay 走 `load_skill_overlay_for_mode`，且**必须**已激活 `AgentScope`；只用本 Agent 的 `skill_mode_map`，不用全局合并的 mode 表。
-
-`RECAP_SKILL_EXTRA_DIRS` 仅向**全局 skill 目录**追加 id；要改变某 Agent 的 mode 映射请改其 bundle 或 `RECAP_SKILL_ID`（须在 `skills` 白名单内）。
-
-### 4.3 Prompts
-
-- 业务 system 底座：`agents/<id>/prompts/` 或 `resources/prompts/`（entry_point `agent_platform.prompts`）。
-- 对话类 Agent 也可在 `prompts.py` 直接拼装，不必走 Skill bundle。
-
----
-
-## 五、HTTP
+### 7.1 HTTP
 
 1. 在 `agents/<id>/http_routes.py` 定义 `APIRouter`。
 2. 在 manifest 的 `http_router_factories` 返回该 router 列表。
-3. `interfaces/api/app.py` 的 `create_app()` 会遍历 `AgentRegistry` 自动 `include_router`。
+3. `adapters/http/app.py` 的 `create_app()` 会遍历 `AgentRegistry` 自动 `include_router`。
 
-鉴权与限流复用 `interfaces/api/deps.py` 的 `require_api_key` / `require_rate_limit`（全局 `RECAP_API_KEY`）。
+鉴权复用 `core/http.py` 的 `require_api_key`。
+
+### 7.2 CLI
+
+在 manifest 声明 `cli_subparser_factory` + `cli_run_handler`，CLI 子命令自动出现。
+
+### 7.3 Scheduler
+
+在 manifest 声明 `scheduled_jobs`，`adapters/scheduler/` 自动发现。
 
 ---
 
-## 六、CLI 交互模式
-
-平台提供 `adapters/cli/repl.py` 的 `run_repl`。`hsk30-tutor` 与 `stock-recap` 默认进入 REPL；脚本单轮用 `--once` 或 `-m` + `--once`。
-
----
-
-## 七、测试
+## 八、测试
 
 | 类型 | 建议 |
 |------|------|
 | 单元 | `tests/test_<agent>_*.py`，mock LLM / 数据源 |
-| 数据完整性 | 验证累积性、数据规模、边界条件（见 `test_hsk30_tutor_units.py`） |
-| 验证逻辑 | 测试超纲检测、专有名词豁免、分词（见 `test_hsk30_tutor_units.py`） |
-| 重试机制 | mock LLM 返回，验证重试次数和覆盖率提升（见 `test_hsk30_tutor_retry.py`） |
+| DI 测试 | 用 `configure_default_deps` + `reset_default_deps` fixture |
 | CLI | 断言 `register_subparser` 参数；`--once` + mock 返回码 0 |
 | HTTP | `TestClient` 调 `/v1/<prefix>/...` |
 | 覆盖率 | `pytest --cov=agent_platform.agents.<id>` — hsk30-tutor 达 91% |
 
+测试中配置 DI：
+
+```python
+from agent_platform.agents.my_agent.deps import configure_default_deps, reset_default_deps
+
+@pytest.fixture(autouse=True)
+def _wire_deps(tmp_path):
+    rf = SqliteRepositoryFactory(str(tmp_path / "test.db"))
+    configure_default_deps(repo_factory=rf, guardrail=NoopGuardrail())
+    yield
+    reset_default_deps()
+```
+
 ---
 
-## 八、注意事项
+## 九、注意事项
 
 1. **不要改 `core/`**，扩展用 Port 或新 infra 实现。
 2. **Agent ID 用 kebab-case**（`my-agent`），Python 包名用下划线（`my_agent`）。
-3. **配置**：复用 `RECAP_*` 全局项，或后续为专属 Agent 增加带前缀的 Settings 字段（避免与 recap 冲突）。
-4. **第三方包**：wheel 里声明 `[project.entry-points."agent_platform.agents"]` 即可被 `discover_agents()` 加载，不必改本仓库 `factory.py`。
+3. **不要直接 import `infra.*`** — 通过 `deps.py` DI 注入。
+4. **entry_points 是唯一注册方式** — 不要修改 `runtime/factory.py` 的硬编码列表。
+5. **Agent 间禁止互引** — `import-linter` 强制。
+6. **配置**：复用全局 `Settings`，或为专属 Agent 增加带前缀的字段。
 
 ---
 
-## 九、文件清单示例
+## 十、文件清单示例
 
-### 9.1 纯对话 Agent（`hsk30-tutor` 模式）
+### 10.1 纯对话 Agent（hsk30-tutor 模式）
 
 ```
 新增：
   src/agent_platform/agents/my_agent/
     __init__.py          ← AGENT_ID 常量
     models.py            ← Pydantic 请求/响应模型
-    syllabus.py          ← 数据加载（leaf，无外部依赖）
-    validation.py        ← 输出验证（依赖 syllabus）
-    prompts.py           ← Prompt 构建（依赖 syllabus + 语法例句）
-    llm_client.py        ← LLM 调用 + 重试 + client 缓存（leaf）
     use_case.py          ← 业务编排（@_with_agent_scope 装饰器）
     manifest.py          ← AgentDefinition 注册（lambda 懒加载 CLI/HTTP）
     http_routes.py       ← FastAPI APIRouter
-    cli.py               ← CLI 子命令（register_subparser + run）
-  tests/
-    test_my_agent.py           ← 基础集成测试
-    test_my_agent_units.py     ← 单元测试（数据/验证/prompt）
-    test_my_agent_retry.py     ← 重试机制测试
-    test_my_agent_coverage.py  ← 覆盖率补充测试
+    cli.py               ← CLI 子命令
+  packages/my-agent/
+    pyproject.toml       ← wheel 配置 + entry_points
+    src/agent_platform → symlink
 
 修改：
-  src/agent_platform/runtime/factory.py   # register_builtin_agents 加一行
+  无（entry_points 自动发现）
 ```
 
-> **设计要点：**
-> - 内部依赖图是 DAG（无环）：`models` ← `syllabus` ← `validation` ← `prompts` ← `use_case`
-> - `llm_client.py` 是 leaf（只依赖 `config.settings`）
-> - `manifest.py` 使用 lambda 懒加载 CLI/HTTP，避免注册时导入业务模块
-> - `use_case.py` 使用 `@_with_agent_scope` 装饰器消除 AgentScope 模板代码
-
-### 9.2 带 MCP + Skill bundle（`news-digest`）
+### 10.2 带 DI 的复杂 Agent（stock-recap 模式）
 
 ```
 新增：
-  src/agent_platform/agents/news_digest/
+  src/agent_platform/agents/my_agent/
     __init__.py
     models.py
-    use_case.py
-    manifest.py
+    deps.py              ← DI 容器（configure_default_deps / default_deps）
+    use_case.py          ← 业务逻辑（通过 deps 获取端口）
+    manifest.py          ← 注册 + CLI/HTTP/Scheduler 钩子
+    http_routes.py
     cli.py
-    http_routes.py          # 可选
-  tests/test_news_digest.py
+    phases/              ← Phase 子类（可选）
+    effects/             ← 副作用处理（可选）
+    data/                ← 数据采集（可选）
+  packages/my-agent/
+    pyproject.toml
+    src/agent_platform → symlink
 
 修改：
-  src/agent_platform/runtime/factory.py   # register_builtin_agents 一行
-  pyproject.toml                            # 可选 entry_points
+  无（entry_points 自动发现）
 ```
-
-**不要**再创建 `interfaces/agents/`、`application/` 或修改 `AGENTS` 字典——这些路径已在 W16 删除。

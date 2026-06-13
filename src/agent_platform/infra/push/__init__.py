@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Callable, Optional
 
 from agent_platform.domain.models import Recap
 
@@ -24,21 +25,32 @@ class PushProvider(ABC):
         ...
 
 
-def get_push_provider(settings: object) -> "PushProvider | None":
-    """根据 settings 返回合适的 push provider，未配置时返回 None。"""
+def get_push_provider(
+    settings: object,
+    *,
+    render_markdown: Optional[Callable[[Recap], str]] = None,
+    render_text: Optional[Callable[[Recap], str]] = None,
+) -> "PushProvider | None":
+    """根据 settings 返回合适的 push provider，未配置时返回 None。
+
+    render_markdown / render_text 由调用方（agent）注入，
+    平台层不依赖任何 agent 的 render 实现。
+    """
     from agent_platform.config.settings import Settings
     s: Settings = settings  # type: ignore[assignment]
 
     if s.push_enabled and s.wxwork_webhook_url:
         from agent_platform.infra.push.wechat import WechatWorkProvider
-        from agent_platform.agents.stock_recap.render import (
-            render_markdown_for_wechat_work,
-            render_wechat_text,
-        )
+
+        if render_markdown is None or render_text is None:
+            raise ValueError(
+                "render_markdown and render_text are required for WechatWork push; "
+                "the calling agent must inject its own render functions."
+            )
         return WechatWorkProvider(
             webhook_url=s.wxwork_webhook_url,
-            render_markdown=render_markdown_for_wechat_work,
-            render_text=render_wechat_text,
+            render_markdown=render_markdown,
+            render_text=render_text,
             fallback_text=s.push_fallback_text,
         )
 

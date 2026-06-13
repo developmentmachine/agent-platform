@@ -47,16 +47,22 @@ class QdrantVectorStore(VectorStore):
             "created qdrant collection=%s vector_size=%s", self._collection, vector_size
         )
 
-    def upsert(self, *, points: List[Dict[str, Any]]) -> None:
-        if not points:
+    def upsert(
+        self,
+        items: Sequence[Dict[str, Any]],
+        *,
+        collection: Optional[str] = None,
+    ) -> None:
+        if not items:
             return
         from qdrant_client.models import PointStruct
 
         client = self._get_client()
-        size = len(points[0]["vector"])
+        coll = collection or self._collection
+        size = len(items[0]["vector"])
         self.ensure_collection(vector_size=size)
         qpoints = []
-        for p in points:
+        for p in items:
             pid = p["id"]
             qpoints.append(
                 PointStruct(
@@ -65,26 +71,28 @@ class QdrantVectorStore(VectorStore):
                     payload=dict(p.get("payload") or {}),
                 )
             )
-        client.upsert(collection_name=self._collection, points=qpoints, wait=True)
+        client.upsert(collection_name=coll, points=qpoints, wait=True)
 
     def query(
         self,
-        *,
         vector: Sequence[float],
-        limit: int,
-        filter_must: Optional[Dict[str, Any]] = None,
+        *,
+        top_k: int = 5,
+        collection: Optional[str] = None,
+        filter: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         from qdrant_client.models import FieldCondition, Filter, MatchValue
 
         client = self._get_client()
+        coll = collection or self._collection
         flt: Optional[Filter] = None
-        if filter_must:
-            must = [FieldCondition(key=k, match=MatchValue(value=v)) for k, v in filter_must.items()]
+        if filter:
+            must = [FieldCondition(key=k, match=MatchValue(value=v)) for k, v in filter.items()]
             flt = Filter(must=must)
         hits = client.search(
-            collection_name=self._collection,
+            collection_name=coll,
             query_vector=list(vector),
-            limit=limit,
+            limit=top_k,
             query_filter=flt,
             with_payload=True,
         )

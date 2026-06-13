@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from agent_platform.core.runtime.budget import AgentBudget
+from agent_platform.core.ports.memory import EmbeddingsPort, VectorStorePort
+from agent_platform.core.ports.repository import RepositoryFactoryPort
 from agent_platform.config.settings import Settings
 from agent_platform.domain.models import Features, GenerateRequest, LlmTokens, MarketSnapshot, Recap
 from agent_platform.domain.run_context import RunContext
+from agent_platform.core.ports.guardrail import GuardrailPort
 
 
 @dataclass
@@ -20,6 +23,13 @@ class RecapAgentRunState:
     t0: float
     defer_evolution_backtest: bool = False
     stream_pipeline_completed: bool = False
+    guardrail: Optional[GuardrailPort] = None
+    repo_factory: Optional[RepositoryFactoryPort] = None
+
+    # Injected callable dependencies (set via deps / use_case)
+    memory_factory: Optional[Callable[..., Tuple[EmbeddingsPort, VectorStorePort]]] = None
+    llm_caller: Optional[Callable[..., Any]] = None
+    push_provider_factory: Optional[Callable[..., Any]] = None
 
     budget: Optional[AgentBudget] = None  # 由 application/recap.py 在入口处注入
 

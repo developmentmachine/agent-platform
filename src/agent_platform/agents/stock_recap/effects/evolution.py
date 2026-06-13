@@ -10,11 +10,10 @@ import json
 import logging
 from typing import Any, Optional
 
+from agent_platform.core.utils import stable_json as _stable_json
 logger = logging.getLogger("agent_platform.side_effects.evolution")
 
 
-def _stable_json(obj: Any) -> str:
-    return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def run_deferred_evolution(

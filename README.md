@@ -7,7 +7,33 @@
 | `stock-recap` | A 股日终复盘 / 次日策略 | 报告、流式 NDJSON、定时任务、MCP 工具 |
 | `hsk30-tutor` | HSK 3.0 中文对话陪练（新三阶段九级，非 HSK 2.0） | 多轮对话（CHAT） |
 
-平台架构与扩展方式见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、[docs/extending-agents.md](docs/extending-agents.md)。`stock-recap` 业务设计见 [docs/ARCHITECTURE_AND_BUSINESS.md](docs/ARCHITECTURE_AND_BUSINESS.md)。
+平台架构与扩展方式见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、[docs/extending-agents.md](docs/extending-agents.md)、[docs/packaging.md](docs/packaging.md)。`stock-recap` 业务设计见 [docs/ARCHITECTURE_AND_BUSINESS.md](docs/ARCHITECTURE_AND_BUSINESS.md)。
+
+---
+
+## 架构概览
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  agent-platform-core  (44 files, 0 外部依赖, 0 上层引用)      │
+│  端口协议(11) + 领域模型 + runtime + AgentApp + utils         │
+├─────────────────────────────────────────────────────────────┤
+│  agent-platform-infra  (48 files, 依赖 core)                 │
+│  sqlite/llm/push/guardrail/memory 实现                       │
+├─────────────────────────────────────────────────────────────┤
+│  agent-platform-stock-recap  (73 files)                      │
+│  agent-platform-hsk30-tutor  (11 files)                      │
+│  业务 Agent（通过 deps.py DI 注入 infra，零模块级 infra 引用）  │
+├─────────────────────────────────────────────────────────────┤
+│  agent-platform  (monolith, 完整运行时: CLI/HTTP/Scheduler)   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**关键特性**：
+- **可拆分**：core / infra / agent 可独立构建 wheel，按需 `pip install`
+- **零耦合**：core → 上层 0 引用，agents → infra 0 模块级引用，agent 间 0 互引
+- **自动发现**：entry_points 机制，安装 wheel 后 AgentApp / CLI / HTTP 自动识别
+- **DI 注入**：通过 `deps.py` 容器注入 infra 实现，业务代码只依赖端口协议
 
 ---
 

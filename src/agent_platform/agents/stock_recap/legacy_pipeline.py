@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterator, List, Optional, Tuple, cast
 
+from agent_platform.core.utils import logged_errors, stable_json as _stable_json
 from opentelemetry import trace
 
 from agent_platform.agents.stock_recap.experiments import select_variant
@@ -20,6 +21,7 @@ from agent_platform.agents.stock_recap.memory.manager import (
 from agent_platform.agents.stock_recap.memory.vector_ops import (
     index_recap_for_memory,
     recall_vector_memory,
+    create_memory_ports,
 )
 from agent_platform.agents.stock_recap.recap_state import RecapAgentRunState
 from agent_platform.domain.models import (
@@ -29,23 +31,14 @@ from agent_platform.domain.models import (
 )
 from agent_platform.agents.stock_recap.data.collector import collect_snapshot
 from agent_platform.agents.stock_recap.data.features import build_features
-from agent_platform.infra.llm.backends import call_llm, model_effective
+from agent_platform.core.config.resolve import model_effective
 from agent_platform.agents.stock_recap.llm.eval import auto_eval
 from agent_platform.agents.stock_recap.llm.prompts import build_messages
-from agent_platform.infra.persistence.db import (
-    insert_recap_audit,
-    insert_run,
-    load_feedback_summary,
-)
-from agent_platform.runtime.observability.metrics import (
-    record_phase_duration,
-    record_recap_run,
-)
-from agent_platform.runtime.observability.tracing import get_tracer
-from agent_platform.infra.policy.guardrails import clamp_llm_messages, coerce_recap_output
+from agent_platform.core.ports.metrics import record_phase_duration, record_recap_run
+from agent_platform.core.runtime.tracing import get_tracer
 from agent_platform.agents.stock_recap.render import render_markdown, render_wechat_text
 
-from agent_platform.application.side_effects import (
+from agent_platform.agents.stock_recap.effects.backtest import (
     load_recent_backtests_simple,
     try_run_backtest,
 )
@@ -60,8 +53,6 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _stable_json(obj: Any) -> str:
-    return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def _span_phase(tracer: Any, name: str, attrs: Optional[dict[str, Any]] = None) -> Any:
@@ -86,18 +77,19 @@ def _phase_recall(state: RecapAgentRunState, tracer: Any) -> None:
         assert state.snapshot is not None and state.features is not None
         tenant_id = state.run_ctx.tenant_id
         state.memory = load_recent_memory(
-            settings.db_path,
+            state.repo_factory,
             date=state.snapshot.date,
             mode=req.mode,
             limit=settings.max_history_for_context,
             tenant_id=tenant_id,
         )
-        state.evolution_guidance = load_evolution_guidance(settings.db_path)
-        state.feedback_summary = load_feedback_summary(settings.db_path, tenant_id=tenant_id)
+        state.evolution_guidance = load_evolution_guidance(state.repo_factory)
+        feedback_repo = state.repo_factory.feedback_repository()
+        state.feedback_summary = feedback_repo.load_summary(tenant_id=tenant_id)
 
         try:
             state.pattern_summary = extract_market_patterns(
-                settings.db_path,
+                state.repo_factory,
                 days=settings.pattern_extraction_days,
                 settings=settings,
                 model_spec=req.model,
@@ -108,7 +100,7 @@ def _phase_recall(state: RecapAgentRunState, tracer: Any) -> None:
             )
             state.pattern_summary = None
 
-        bt_history = load_recent_backtests_simple(settings.db_path, limit=3)
+        bt_history = load_recent_backtests_simple(state.repo_factory, limit=3)
         if bt_history:
             state.backtest_context = "近期回测评分：" + " | ".join(
                 f"{b['strategy_date']} 命中率={b.get('hit_rate', 0):.0%}" for b in bt_history
@@ -116,14 +108,20 @@ def _phase_recall(state: RecapAgentRunState, tracer: Any) -> None:
         else:
             state.backtest_context = None
 
-        state.prompt_version = get_prompt_version(settings.db_path)
+        state.prompt_version = get_prompt_version(state.repo_factory)
 
+        if state.memory_factory is not None:
+            mem_emb, mem_store = state.memory_factory(state.settings)
+        else:
+            mem_emb, mem_store = create_memory_ports(state.settings)
         long_m, ent_m, vec_meta = recall_vector_memory(
             settings,
             tenant_id=tenant_id,
             mode=req.mode,
             snapshot=state.snapshot,
             features=state.features,
+            embeddings=mem_emb,
+            vector_store=mem_store,
         )
         state.memory_long = long_m
         state.memory_entities = ent_m
@@ -133,7 +131,7 @@ def _phase_recall(state: RecapAgentRunState, tracer: Any) -> None:
         # 命中后 prompt_version 被 variant 绑定的版本覆盖，但活跃全局版本仍记 trace。
         stickiness = state.run_ctx.session_id or state.run_ctx.request_id
         assignment = select_variant(
-            settings.db_path, mode=req.mode, stickiness_key=stickiness
+            state.repo_factory, mode=req.mode, stickiness_key=stickiness
         )
         if assignment is not None:
             state.experiment_id = assignment.experiment_id
@@ -172,7 +170,8 @@ def _phase_plan(state: RecapAgentRunState, tracer: Any) -> None:
                 skill_id_override=settings.skill_id_override,
             )
         )
-        state.messages = cast(List[dict[str, str]], clamp_llm_messages(raw_messages))
+        gr = state.guardrail
+        state.messages = cast(List[dict[str, str]], gr.clamp_messages(raw_messages))
 
 
 _CRITIC_FEEDBACK_TEMPLATE = (
@@ -205,12 +204,25 @@ def _phase_act(state: RecapAgentRunState, tracer: Any) -> None:
         if not req.force_llm:
             return
 
+        # NOTE: This is a domain-specific "critic retry" loop that mutates
+        # state.messages between retries (injecting critic feedback for the
+        # LLM to self-correct).  It does NOT map cleanly to tenacity's
+        # @retry because (a) the retry predicate is business-logic-driven
+        # (LlmBusinessError), not transport errors; (b) each retry requires
+        # a side-effect (_inject_critic_feedback) that changes the next
+        # call's input; and (c) LlmBudgetExceeded must abort immediately
+        # without retry.  Kept as an explicit loop for clarity.
         max_attempts = 1 + max(0, int(settings.agent_critic_max_retries))
         last_business_err: Optional[LlmBusinessError] = None
 
         for attempt in range(max_attempts):
             try:
-                state.recap, state.tokens = call_llm(
+                if state.llm_caller is None:
+                    raise RuntimeError(
+                        "llm_caller not configured. "
+                        "Set it via configure_default_deps(llm_caller=...)."
+                    )
+                state.recap, state.tokens = state.llm_caller(
                     settings=settings,
                     mode=req.mode,
                     messages=state.messages,
@@ -218,7 +230,8 @@ def _phase_act(state: RecapAgentRunState, tracer: Any) -> None:
                     db_path=settings.db_path,
                     date=state.snapshot.date,
                 )
-                state.recap = coerce_recap_output(state.recap)
+                gr = state.guardrail
+                state.recap = gr.coerce_recap_output(state.recap)
                 state.rendered_markdown = render_markdown(state.recap)
                 state.rendered_wechat_text = render_wechat_text(state.recap)
                 state.llm_error = None
@@ -300,8 +313,8 @@ def _phase_persist(state: RecapAgentRunState, tracer: Any) -> None:
         {"agent.phase": "persist", "recap.latency_ms": latency_ms},
     ):
         assert state.snapshot is not None and state.features is not None
-        insert_run(
-            settings.db_path,
+        run_repo = state.repo_factory.run_repository()
+        run_repo.insert(
             request_id=run_ctx.request_id,
             created_at=_utc_now_iso(),
             mode=req.mode,
@@ -325,8 +338,8 @@ def _phase_persist(state: RecapAgentRunState, tracer: Any) -> None:
 
         if settings.recap_audit_enabled:
             try:
-                insert_recap_audit(
-                    settings.db_path,
+                audit_repo = state.repo_factory.recap_audit_repository()
+                audit_repo.insert(
                     request_id=run_ctx.request_id,
                     created_at=_utc_now_iso(),
                     mode=str(req.mode),
@@ -360,17 +373,28 @@ def _phase_index_memory(state: RecapAgentRunState, tracer: Any) -> None:
         if state.recap is None:
             return
         try:
+            if state.memory_factory is not None:
+                idx_emb, idx_store = state.memory_factory(state.settings)
+            else:
+                idx_emb, idx_store = create_memory_ports(state.settings)
             index_recap_for_memory(
                 state.settings,
                 tenant_id=run_ctx.tenant_id,
                 request_id=run_ctx.request_id,
                 mode=req.mode,
                 recap=state.recap,
+                embeddings=idx_emb,
+                vector_store=idx_store,
             )
         except Exception as e:
             logger.warning(
                 _stable_json({"event": "index_memory_phase_failed", "error": str(e)})
             )
+
+
+@logged_errors("push_failed", reraise=False, fallback=False, logger_name="agent_platform.agents.stock_recap.legacy_pipeline")
+def _safe_push_recap(settings: Any, recap: Any, request_id: str, repo_factory: Any = None, push_provider_factory: Any = None) -> bool:
+    return _push_recap(settings, recap, request_id=request_id, repo_factory=repo_factory, push_provider_factory=push_provider_factory)
 
 
 def _phase_reflect(state: RecapAgentRunState, tracer: Any) -> None:
@@ -389,7 +413,7 @@ def _phase_reflect(state: RecapAgentRunState, tracer: Any) -> None:
         if not state.defer_evolution_backtest:
             try:
                 check_and_run_evolution(
-                    settings.db_path,
+                    state.repo_factory,
                     settings=settings,
                     trigger_run_id=request_id,
                     force=False,
@@ -403,13 +427,7 @@ def _phase_reflect(state: RecapAgentRunState, tracer: Any) -> None:
         if state.recap is not None:
             # 走 push_recap：内置 (request_id, channel) 幂等账本（push_log），
             # 重试 / outbox 兜底 / scheduler 重发都安全。
-            try:
-                state.push_result = _push_recap(
-                    settings, state.recap, request_id=request_id
-                )
-            except Exception as e:
-                logger.warning(_stable_json({"event": "push_failed", "error": str(e)}))
-                state.push_result = False
+            state.push_result = _safe_push_recap(settings, state.recap, request_id=request_id, repo_factory=state.repo_factory, push_provider_factory=state.push_provider_factory)
 
         if (
             not state.defer_evolution_backtest
@@ -417,7 +435,7 @@ def _phase_reflect(state: RecapAgentRunState, tracer: Any) -> None:
             and state.recap is not None
         ):
             assert state.snapshot is not None
-            try_run_backtest(settings.db_path, state.snapshot.date)
+            try_run_backtest(state.repo_factory, state.snapshot.date)
 
 
 _PHASE_ORDER: Tuple[Tuple[PhaseName, Callable[[RecapAgentRunState, Any], None]], ...] = (
@@ -531,6 +549,17 @@ def _record_run_outcome(state: RecapAgentRunState) -> None:
     record_recap_run(mode=str(req.mode), provider=str(req.provider), status=status)
 
 
+def _ensure_deps(state: RecapAgentRunState) -> None:
+    """Fill in repo_factory / guardrail from default_deps() if not set."""
+    if state.repo_factory is None or state.guardrail is None:
+        from agent_platform.agents.stock_recap.deps import default_deps
+        d = default_deps()
+        if state.repo_factory is None:
+            state.repo_factory = d.repo_factory
+        if state.guardrail is None:
+            state.guardrail = d.guardrail
+
+
 def _run_all_phases(state: RecapAgentRunState, tracer: Any) -> GenerateResponse:
     for name, fn in _PHASE_ORDER:
         ok = _check_budget_between_phases(state, name)
@@ -545,6 +574,7 @@ def _run_all_phases(state: RecapAgentRunState, tracer: Any) -> GenerateResponse:
 
 def execute_recap_pipeline(state: RecapAgentRunState) -> GenerateResponse:
     """在已建立的 ``recap.generate`` 父 span 与 RunContext 下执行各 Agent 阶段。"""
+    _ensure_deps(state)
     tracer = get_tracer(__name__)
     return _run_all_phases(state, tracer)
 
@@ -559,6 +589,7 @@ def iter_recap_agent_ndjson(state: RecapAgentRunState) -> Iterator[str]:
     按阶段产出 NDJSON 行（便于客户端展示 Agent 进度）；最后一行为 ``result``。
     须在 ``recap.generate`` span 与 RunContext 已建立的环境下调用。
     """
+    _ensure_deps(state)
     tracer = get_tracer(__name__)
     req = state.request
     run_ctx = state.run_ctx

@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 
 import agent_platform.config.settings as settings_module
 import agent_platform.infra.persistence.db as db_module
+from agent_platform.adapters.http.deps import _reset_limiter_for_tests
 from agent_platform.config.settings import Settings
 from agent_platform.domain.models import (
     Features,
@@ -178,6 +179,7 @@ def _settings(tmp_path, monkeypatch, **overrides) -> Settings:
     db = str(tmp_path / "deps.db")
     init_db(db)
     settings_module._settings_instance = None
+    _reset_limiter_for_tests()
 
     monkeypatch.setenv("RECAP_DB_PATH", db)
     monkeypatch.setenv("RECAP_RATE_LIMIT_RPM", "1000")

@@ -9,8 +9,15 @@ from __future__ import annotations
 
 import functools
 import logging
-import time
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+
+from tenacity import (
+    Retrying,
+    before_sleep_log,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from agent_platform.config.settings import Settings
 
@@ -59,26 +66,23 @@ def _stub_from_messages(messages: List[Dict[str, str]]) -> str:
 
 # ── 基础设施 ────────────────────────────────────────────────
 
-def _is_retryable(exc: Exception) -> bool:
+def _is_retryable(exc: BaseException) -> bool:
     """判断异常是否可重试（HTTP 429/5xx）。"""
     status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
     return isinstance(status, int) and status in _RETRYABLE_STATUS
 
 
 def _retry_loop(fn: Callable[[], Any], max_retries: int = _MAX_RETRIES) -> Any:
-    """通用重试循环：执行 fn()，可重试异常自动退避重试。"""
-    for attempt in range(max_retries + 1):
-        try:
+    """通用重试循环：执行 fn()，可重试异常自动退避重试（基于 tenacity）。"""
+    for attempt in Retrying(
+        stop=stop_after_attempt(max_retries + 1),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception(_is_retryable),
+        reraise=True,
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+    ):
+        with attempt:
             return fn()
-        except Exception as exc:
-            if _is_retryable(exc) and attempt < max_retries:
-                delay = 1.0 * (2 ** attempt)
-                logger.warning("Request failed (status=%s), retry %d/%d in %.1fs",
-                               getattr(exc, "status_code", getattr(exc, "code", "?")),
-                               attempt + 1, max_retries, delay)
-                time.sleep(delay)
-                continue
-            raise
 
 
 def _ensure_client(settings: Settings, messages: List[Dict[str, str]]) -> Tuple[Any, str]:

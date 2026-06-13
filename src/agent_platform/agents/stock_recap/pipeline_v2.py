@@ -29,7 +29,7 @@ from agent_platform.agents.stock_recap.legacy_pipeline import (
     _run_phase_with_metrics,
 )
 from agent_platform.domain.models import GenerateResponse
-from agent_platform.runtime.observability.tracing import get_tracer
+from agent_platform.core.runtime.tracing import get_tracer
 
 logger = logging.getLogger("agent_platform.agents.stock_recap.pipeline_v2")
 
@@ -49,6 +49,8 @@ def _ndjson_line(event: str, **fields: Any) -> str:
 
 def execute_v2(state: RecapRunState) -> GenerateResponse:
     """v2 入口：Pipeline = build_default_phases()。"""
+    from agent_platform.agents.stock_recap.legacy_pipeline import _ensure_deps
+    _ensure_deps(state)
     tracer = get_tracer(__name__)
     phases = build_default_phases()
     phase_map = _phase_dict(phases)
@@ -66,6 +68,8 @@ def execute_v2(state: RecapRunState) -> GenerateResponse:
 
 def iter_ndjson_v2(state: RecapRunState) -> Iterator[str]:
     """v2 streaming：NDJSON 形态与历史等价。"""
+    from agent_platform.agents.stock_recap.legacy_pipeline import _ensure_deps
+    _ensure_deps(state)
     tracer = get_tracer(__name__)
     req = state.request
     run_ctx = state.run_ctx

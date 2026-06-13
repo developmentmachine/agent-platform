@@ -1,12 +1,16 @@
-"""平台 application 层（W7 后）。
+"""向后兼容 shim — 实际代码已迁入 agents.stock_recap.*。
 
-recap 业务已迁入 ``agent_platform.agents.stock_recap.*``；本包 ``__getattr__`` 仅保留
-少量符号的 lazy re-export（``generate_once`` 等），供尚未改 import 的外部脚本过渡。
-新代码请直接 import ``agents.stock_recap``。
+.. deprecated::
+    请直接 ``from agent_platform.agents.stock_recap import ...``。
+    本模块的 lazy re-export 将在下个大版本移除。
 """
+from __future__ import annotations
+
+import warnings
 
 
 def __getattr__(name: str):
+    _warn()
     if name == "RecapAgent":
         from agent_platform.agents.stock_recap.agent import RecapAgent
 
@@ -30,6 +34,21 @@ def __getattr__(name: str):
 
         return iter_generate_ndjson
     raise AttributeError(name)
+
+
+_warned = False
+
+
+def _warn() -> None:
+    global _warned
+    if not _warned:
+        warnings.warn(
+            "agent_platform.application is deprecated; "
+            "import from agent_platform.agents.stock_recap instead.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        _warned = True
 
 
 __all__ = [

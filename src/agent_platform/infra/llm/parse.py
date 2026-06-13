@@ -5,6 +5,7 @@ import json
 import logging
 from typing import Any
 
+from agent_platform.core.utils import stable_json as _stable_json
 from agent_platform.domain.models import (
     LlmError,
     LlmParseError,
@@ -19,8 +20,6 @@ from agent_platform.domain.registries import ModeRegistry, default_mode_registry
 logger = logging.getLogger("agent_platform.infra.llm.parse")
 
 
-def _stable_json(obj: Any) -> str:
-    return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def parse_json_from_text(text: str) -> Any:

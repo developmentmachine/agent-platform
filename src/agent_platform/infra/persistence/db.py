@@ -26,6 +26,8 @@ from agent_platform.domain.models import (
     Recap,
 )
 
+from agent_platform.core.utils import stable_json as _stable_json
+
 
 # ─── 连接管理 ───────────────────────────────────────────────────────────────────
 
@@ -406,8 +408,6 @@ def _safe_add_column(db_path: str, table: str, column: str, col_type: str) -> No
 
 # ─── recap_runs CRUD ──────────────────────────────────────────────────────────
 
-def _stable_json(obj: Any) -> str:
-    return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def insert_run(
@@ -755,6 +755,27 @@ def get_pending_backtest(db_path: str, today: str) -> Optional[str]:
 
 
 # ─── prompt_state（跨进程活跃版本） ───────────────────────────────────────────
+
+import threading as _threading
+import time as _time
+
+_PROMPT_VERSION_CACHE_TTL_S = 5
+_pv_cache_lock = _threading.Lock()
+_pv_cached: tuple[str, str, float] | None = None  # (db_path, version, ts)
+
+
+def get_prompt_version(db_path: str) -> str:
+    """获取当前活跃 prompt_version（带 5s 本地缓存）。"""
+    global _pv_cached
+    now = _time.monotonic()
+    with _pv_cache_lock:
+        if _pv_cached and _pv_cached[0] == db_path and (now - _pv_cached[2]) < _PROMPT_VERSION_CACHE_TTL_S:
+            return _pv_cached[1]
+    ver = get_active_prompt_version(db_path) or "unknown"
+    with _pv_cache_lock:
+        _pv_cached = (db_path, ver, _time.monotonic())
+    return ver
+
 
 def get_active_prompt_version(db_path: str) -> Optional[str]:
     """读取 prompt_state.active_version；未写入则返回 None。"""

@@ -8,21 +8,12 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Optional, Set
 
+from agent_platform.core.utils import stable_json as _stable_json
 from agent_platform.domain.models import Features, MarketSnapshot, Mode, RecapDaily, RecapStrategy
-from agent_platform.resources.prompts.loader import (
-    PROMPT_BASE_VERSION,
-    json_output_instruction,
-    pattern_extraction_system,
-    system_recap_base,
-)
-from agent_platform.skills.loader import load_skill_overlay_for_mode
-
 # 涨跌幅为 0 是有效数据，不能过滤
 _KEEP_ZERO_KEYS: Set[str] = {"涨跌幅", "净买入(亿)", "涨跌幅(%)"}
 
 
-def _stable_json(obj: Any) -> str:
-    return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def _drop_empty(obj: Any) -> Any:
@@ -216,8 +207,10 @@ def build_system_prompt(
     feedback_summary: Optional[Dict[str, Any]] = None,
     skill_id_override: Optional[str] = None,
 ) -> str:
+    from agent_platform.resources.prompts.loader import system_recap_base
     base = system_recap_base()
 
+    from agent_platform.skills.loader import load_skill_overlay_for_mode
     skill_doc = load_skill_overlay_for_mode(mode, override_skill_id=skill_id_override)
     if skill_doc is not None:
         label = skill_doc.name or skill_doc.skill_id
@@ -329,12 +322,17 @@ def build_messages(
             "role": "user",
             "content": _stable_json(
                 {
-                    "instruction": json_output_instruction(),
+                    "instruction": _json_output_instruction(),
                     "schema": schema,
                 }
             ),
         },
     ]
+
+
+def _json_output_instruction() -> str:
+    from agent_platform.resources.prompts.loader import json_output_instruction
+    return json_output_instruction()
 
 
 __all__ = [
@@ -344,3 +342,13 @@ __all__ = [
     "build_user_prompt",
     "pattern_extraction_system",
 ]
+
+
+def __getattr__(name: str):
+    if name == "PROMPT_BASE_VERSION":
+        from agent_platform.resources.prompts.loader import PROMPT_BASE_VERSION
+        return PROMPT_BASE_VERSION
+    if name == "pattern_extraction_system":
+        from agent_platform.resources.prompts.loader import pattern_extraction_system
+        return pattern_extraction_system
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

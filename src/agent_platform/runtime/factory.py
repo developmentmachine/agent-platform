@@ -70,11 +70,36 @@ def create_runtime(
 
 
 def _register_builtin_agents(reg: AgentRegistry) -> None:
-    """显式注册仓库内 Agent（避免 entry_points 在 editable install 下偶发失效）。"""
-    for name, mod_path in (
+    """通过 entry_points 发现并注册 Agent，editable install 无 entry_point 时回退硬编码列表。
+
+    新增 Agent 只需在 pyproject.toml 声明 entry_point，无需修改本函数。
+    """
+    from importlib.metadata import entry_points
+
+    try:
+        eps = entry_points(group="agent_platform.agents")
+        if eps:
+            for ep in eps:
+                if reg.has(ep.name):
+                    continue
+                try:
+                    register = ep.load()
+                    register(reg)
+                except Exception as e:
+                    logger.warning("failed to register agent %s via entry_point: %s", ep.name, e)
+            return
+    except Exception as e:
+        logger.debug("entry_points(%s) skipped: %s", "agent_platform.agents", e)
+
+    # Fallback: editable install 下 entry_points 可能为空，直接导入 manifest
+    logger.debug("no entry_points found, falling back to hardcoded builtin agents")
+    _HARDCODED_AGENTS = [
         ("stock_recap", "agent_platform.agents.stock_recap.manifest"),
         ("hsk30_tutor", "agent_platform.agents.hsk30_tutor.manifest"),
-    ):
+    ]
+    for name, mod_path in _HARDCODED_AGENTS:
+        if reg.has(name):
+            continue
         try:
             import importlib
 

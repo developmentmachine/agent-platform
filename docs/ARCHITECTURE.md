@@ -12,7 +12,8 @@
 - 多 Agent：每个 use case 一个独立 Agent 包，互不依赖；
 - 多入口：CLI / HTTP / WeCom / QQ / Scheduler / MCP-stdio 通过同一 Runtime；
 - 工具走 MCP：进程内不再有 function-calling 私有注册表（迁移分阶段进行）；
-- 插件化：Agent、Skill、Tool、LLM 后端均通过 `entry_points` 注册。
+- 插件化：Agent、Skill、Tool、LLM 后端均通过 `entry_points` 注册；
+- **可拆分打包**：core / infra / agent 可独立构建 wheel，按需组装。
 
 当前内置业务 Agent：
 
@@ -21,92 +22,270 @@
 | `stock-recap` | `agents/stock_recap/` | 报告、NDJSON 流、定时任务、MCP 工具、Skills |
 | `hsk30-tutor` | `agents/hsk30_tutor/` | HSK 3.0 多轮对话陪练（CHAT）、字词约束验证、自动重试修正、流式输出 |
 
-`stock-recap` 是第一个完整验证平台契约的 Agent；`hsk30-tutor`（W17+）验证第二 Agent 的 CLI/HTTP 自动装配与业务隔离，并展示了**纯业务 Agent**的最佳实践（只依赖 `core.*`，不碰 `infra.*`）。
-
 ---
 
 ## 2. 架构分层（六边形 / 端口与适配器）
 
 ```
  ┌──────────────────────────────────────────────────────────┐
- │ Driving Adapters                                         │
- │  CLI · HTTP/Webhook · WeCom AiBot · QQ Bot · Scheduler   │
- │  MCP-stdio (Agent 暴露面)                                 │
- └────────────────────────┬─────────────────────────────────┘
-                          ↓ AgentRuntime.run / stream
- ┌──────────────────────────────────────────────────────────┐
- │ Runtime  (Composition Root)                              │
- │  AgentRuntime · create_runtime · AgentScope 裁剪         │
- │  validate_agent_dependencies · SessionResolver           │
- └────────────────────────┬─────────────────────────────────┘
-                          ↓ AgentDefinition.runner / pipeline
- ┌──────────────────────────────────────────────────────────┐
- │ Orchestration  (泛型，与具体 Agent 解耦)                   │
- │  Phase[StateT] · Pipeline · RunState 基类                 │
- │  SideEffectBus · StreamEvent                              │
- └────────────────────────┬─────────────────────────────────┘
-                          ↓
- ┌──────────────────────────────────────────────────────────┐
- │ Agents / <id>                                            │
- │  domain · phases · prompts · skills · data · effects     │
- └────────────────────────┬─────────────────────────────────┘
-                          ↓
- ┌──────────────────────────────────────────────────────────┐
- │ Core / Ports                                             │
- │  LlmBackendPort · McpClientPort · MemoryPort · RepoPort  │
- │  RendererPort · GuardrailPort · PushPort · SessionPort   │
- └────────────────────────┬─────────────────────────────────┘
-                          ↓ implements
- ┌──────────────────────────────────────────────────────────┐
- │ Infrastructure (Driven Adapters)                         │
- │  LLM providers · MCP client · SQLite/PG · Qdrant         │
- │  Push · Data adapters                                    │
- └──────────────────────────────────────────────────────────┘
+│ Driving Adapters                                         │
+│  CLI · HTTP/Webhook · WeCom AiBot · QQ Bot · Scheduler   │
+│  MCP-stdio (Agent 暴露面)                                 │
+└────────────────────────┬─────────────────────────────────┘
+                         ↓ AgentRuntime.run / stream
+┌──────────────────────────────────────────────────────────┐
+│ Runtime  (Composition Root)                              │
+│  AgentRuntime · create_runtime · AgentScope 裁剪         │
+│  validate_agent_dependencies · SessionResolver           │
+└────────────────────────┬─────────────────────────────────┘
+                         ↓ AgentDefinition.runner / pipeline
+┌──────────────────────────────────────────────────────────┐
+│ Orchestration  (泛型，与具体 Agent 解耦)                   │
+│  Phase[StateT] · Pipeline · RunState 基类                 │
+│  SideEffectBus · StreamEvent                              │
+└────────────────────────┬─────────────────────────────────┘
+                         ↓
+┌──────────────────────────────────────────────────────────┐
+│ Agents / <id>                                            │
+│  domain · phases · prompts · skills · data · effects     │
+│  deps.py (DI 容器) · manifest.py (注册)                   │
+└────────────────────────┬─────────────────────────────────┘
+                         ↓ 端口协议（零 infra 引用）
+┌──────────────────────────────────────────────────────────┐
+│ Core / Ports                                             │
+│  LlmBackendPort · McpClientPort · MemoryPort · RepoPort  │
+│  RendererPort · GuardrailPort · PushPort · SessionPort   │
+│  AgentApp (独立运行容器)                                   │
+└────────────────────────┬─────────────────────────────────┘
+                         ↓ implements
+┌──────────────────────────────────────────────────────────┐
+│ Infrastructure (Driven Adapters)                         │
+│  LLM providers · MCP client · SQLite/PG · Qdrant         │
+│  Push · Guardrail · Memory · Embeddings                  │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. 物理分层（src/agent_platform/）
+## 3. 物理分层与独立包
 
-| 包 | 角色 | 关键内容 |
-|----|------|----------|
-| `core/` | 平台契约层 | `ports/` · `runtime/` · `orchestration/` · `registry/` · `errors` |
-| `runtime/` | Composition Root | `create_runtime` · `AgentRuntime` · `scope.agent_execution` · `agent_validation` |
-| `core/runtime/agent_scope.py` | 运行期白名单 | `AgentScope` · `current_agent_scope`（MCP ∩ 声明、skill 按 Agent mode 表） |
-| `infra/` | Driven Adapters | `llm/` · `mcp_client/` · `persistence/` · `memory/` · `push/` · `guardrail/` |
-| `tools_server/` | 独立 MCP server | `server.py` · `handlers/` |
-| `agents/<id>/` | 业务 Agent（互相隔离） | `manifest.py` · `domain/` · `phases/` · `prompts/` · `skills/` |
-| `adapters/` | Driving Adapters | `cli/` · `http/` · `wecom/` · `qq/` · `scheduler/` · `mcp_stdio/` |
-| `application/` 等 | **迁移中：老 4 层路径** | 与 v2 路径并存；后续 commit 逐步迁入 v2 路径 |
+### 3.1 源码结构（monolith 为 source of truth）
 
-> **当前 commit 的迁移策略**：core / runtime / agents / adapters / tools_server / infra 是**新的规范路径**；
-> infrastructure / interfaces / application / domain / observability / policy / presentation 仍是**真实代码所在**。
-> 两套路径**完全等价**，业务代码与测试无任何破坏。后续 commit 将物理迁移代码并把旧路径转为 shim。
+```
+src/agent_platform/
+├── core/                   ← Layer 0: 平台契约（0 外部依赖，0 上层引用）
+│   ├── ports/              ← 11 个端口协议（Protocol）
+│   ├── runtime/            ← AgentScope, RunContext, Tracing, Metrics
+│   ├── orchestration/      ← Pipeline, Phase, SideEffectBus
+│   ├── registry/           ← AgentDefinition, AgentRegistry
+│   ├── app.py              ← AgentApp（独立运行容器）
+│   ├── config/             ← Settings, 配置管理
+│   ├── domain/             ← 领域模型（Recap, GenerateRequest 等）
+│   └── utils/              ← stable_json, utc_now_iso 等
+├── infra/                  ← Layer 1: 端口实现（依赖 core）
+│   ├── persistence/        ← SQLite repos, init_db
+│   ├── llm/                ← LLM backends, providers
+│   ├── push/               ← WeChat push
+│   ├── policy/             ← Guardrail 实现
+│   ├── memory/             ← Embeddings, VectorStore
+│   └── embeddings/         ← OpenAI embeddings
+├── agents/                 ← Layer 2: 业务 Agent（依赖 core，lazy 引用 infra）
+│   ├── stock_recap/        ← 73 files, 通过 deps.py DI
+│   └── hsk30_tutor/        ← 11 files, 纯 core 引用
+├── adapters/               ← Layer 3: Driving Adapters
+├── runtime/                ← Composition Root (factory.py)
+└── tools_server/           ← MCP 工具服务
+```
 
----
+### 3.2 独立 wheel 包
 
-## 4. 依赖方向（import-linter 强制）
+| 包名 | 内容 | 文件数 | 依赖 |
+|------|------|--------|------|
+| `agent-platform-core` | ports + domain + config + runtime + AgentApp | 44 | 无外部依赖 |
+| `agent-platform-infra` | SQLite/LLM/push/guardrail/memory 实现 | 48 | core |
+| `agent-platform-stock-recap` | stock_recap agent | 73 | core + infra |
+| `agent-platform-hsk30-tutor` | hsk30_tutor agent | 11 | core + infra |
+| `agent-platform` (monolith) | 完整运行时: CLI/HTTP/Scheduler/Bot | 全部 | core + infra + all agents |
+
+### 3.3 依赖方向（import-linter 强制）
 
 ```
 adapters/*       → runtime, core
 runtime          → core, infra（通过 ports）, agents（仅 Composition Root 显式注册）
-agents/<id>      → core, infra（通过 ports）
+agents/<id>      → core（模块级）, infra（仅函数内 lazy import）
 agents/<a>       ↛ agents/<b>          # 互相隔离
-tools_server     → core.ports.mcp_tool, 各 handler
-tools_server     ↛ agents              # 工具中立
 infra/*          → core.ports
 core             ↛ 任何上层
 ```
+
+**关键约束**：
+- `core → 上层`：**0** 模块级引用（import-linter 强制）
+- `agents → infra`：**0** 模块级引用（全部通过 DI / lazy import）
+- `agents ↔ agents`：**0** 互引
 
 `pyproject.toml [tool.importlinter]` 已配置 4 条 contract，CI 跑 `lint-imports` 强制。
 
 ---
 
-## 5. 平台扩展点（如何新增）
+## 4. 依赖注入（DI）模式
+
+### 4.1 端口协议（core/ports/）
+
+```python
+# core/ports/llm.py
+@runtime_checkable
+class LlmBackendPort(Protocol):
+    def call(self, messages, **kwargs) -> Tuple[str, LlmTokens]: ...
+
+# core/ports/repository.py
+@runtime_checkable
+class RepositoryFactoryPort(Protocol):
+    def run_repository(self) -> RunRepository: ...
+    def feedback_repository(self) -> FeedbackRepository: ...
+    # ... 共 6 个 repo
+
+# core/ports/guardrail.py
+@runtime_checkable
+class GuardrailPort(Protocol):
+    def validate_generate_request(self, req) -> None: ...
+    def clamp_messages(self, messages, max_chars) -> List[dict]: ...
+    def coerce_recap_output(self, recap, *args, **kwargs) -> Any: ...
+```
+
+### 4.2 Agent DI 容器（agents/<id>/deps.py）
+
+```python
+# agents/stock_recap/deps.py
+@dataclass
+class StockRecapDeps:
+    repo_factory: RepositoryFactoryPort
+    guardrail: GuardrailPort
+    memory_factory: Optional[Callable] = None
+    llm_caller: Optional[Callable] = None
+    push_provider_factory: Optional[Callable] = None
+    init_db: Optional[Callable[[str], None]] = None
+
+# Bootstrap（monolith / CLI / HTTP 入口调用一次）
+configure_default_deps(
+    repo_factory=SqliteRepositoryFactory(db_path),
+    guardrail=GuardrailAdapter(),
+    init_db=init_db,
+    ...
+)
+
+# 业务代码
+deps = default_deps()
+repo = deps.repo_factory.run_repository()
+```
+
+### 4.3 独立运行（AgentApp）
+
+```python
+from agent_platform.core.app import AgentApp
+
+# 不依赖 monolith，只需 core + infra + agent wheel
+app = AgentApp(
+    agent_id="stock-recap",
+    llm=my_llm_backend,
+    repo_factory=my_repo_factory,
+)
+result = app.run(payload={"mode": "daily", "provider": "live"})
+```
+
+---
+
+## 5. Agent 自动发现
+
+### 5.1 entry_points 机制
+
+```toml
+# packages/stock-recap/pyproject.toml
+[project.entry-points."agent_platform.agents"]
+stock-recap = "agent_platform.agents.stock_recap.manifest:register"
+```
+
+```python
+# runtime/factory.py — 自动发现
+from importlib.metadata import entry_points
+
+for ep in entry_points(group="agent_platform.agents"):
+    register = ep.load()
+    register(registry)
+```
+
+### 5.2 发现链路
+
+```
+pip install agent-platform-stock-recap
+    ↓ entry_points 写入 dist-info/entry_points.txt
+AgentApp / create_runtime / CLI
+    ↓ importlib.metadata.entry_points(group="agent_platform.agents")
+    ↓ 自动调用 register(registry)
+Agent 可用
+```
+
+**无需修改任何平台文件** — 只要 wheel 声明了 entry_points，安装后自动发现。
+
+---
+
+## 6. 打包与发布
+
+### 6.1 uv workspace（monolith 作为 source of truth）
+
+```toml
+# 根 pyproject.toml
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+agent-platform-core = { workspace = true }
+agent-platform-infra = { workspace = true }
+agent-platform-stock-recap = { workspace = true }
+agent-platform-hsk30-tutor = { workspace = true }
+```
+
+### 6.2 包结构（symlink 模式）
+
+```
+packages/
+├── core/
+│   ├── pyproject.toml          ← 构建配置
+│   └── src/agent_platform → symlink → ../../../src/agent_platform
+├── infra/
+│   ├── pyproject.toml
+│   └── src/agent_platform → symlink
+├── stock-recap/
+│   ├── pyproject.toml          ← only-include: agents/stock_recap
+│   └── src/agent_platform → symlink
+└── hsk30-tutor/
+    ├── pyproject.toml          ← only-include: agents/hsk30_tutor
+    └── src/agent_platform → symlink
+```
+
+### 6.3 构建命令
+
+```bash
+# 构建全部
+cd packages/core && uv build --no-cache
+cd packages/infra && uv build --no-cache
+cd packages/stock-recap && uv build --no-cache
+cd packages/hsk30-tutor && uv build --no-cache
+
+# 独立安装验证
+pip install dist/agent_platform_core-0.1.0-py3-none-any.whl
+pip install dist/agent_platform_infra-0.1.0-py3-none-any.whl
+pip install dist/agent_platform_stock_recap-0.1.0-py3-none-any.whl
+```
+
+详细打包指南见 [`docs/packaging.md`](./packaging.md)。
+
+---
+
+## 7. 平台扩展点（如何新增）
 
 | 扩展点 | 怎么做 | 例子 |
 |--------|--------|------|
-| **新 Agent** | 新建 `agents/<id>/manifest.py`，导出 `register(reg)`；可选 entry_point | `stock-recap`、`hsk30-tutor` |
+| **新 Agent** | 新建 `agents/<id>/manifest.py`，导出 `register(reg)`；声明 entry_point | `stock-recap`、`hsk30-tutor` |
 | **新 LLM 后端** | 实现 `LlmBackendPort`，在 `infra/llm/providers` 注册 | `openai` / `ollama` |
 | **新工具** | `tools_server/tools/` 登记 SPEC；进入全局 MCP 池 | `web_search` |
 | **新接入入口** | 在 `adapters/<x>/` 实现 connector，统一调 `runtime.run(...)` | `wecom` / `qq` |
@@ -115,65 +294,27 @@ core             ↛ 任何上层
 | **新副作用** | Agent 在注册时通过 `SideEffectBus.subscribe(event, handler)` | `evolution` / `push` |
 | **选择性部署** | 设置 `AGENTS_ENABLED` 环境变量（逗号分隔 Agent ID），`_register_builtin_agents` 按需注册 | `AGENTS_ENABLED=hsk30-tutor` |
 
-> **选择性部署示例：**
-> ```bash
-> # 只部署 hsk30-tutor
-> AGENTS_ENABLED=hsk30-tutor uv run agent-platform stock-recap --serve
-> # 只部署 stock-recap
-> AGENTS_ENABLED=stock-recap uv run agent-platform stock-recap --serve
-> # 全部部署（默认）
-> uv run agent-platform stock-recap --serve
-> ```
+详细新 Agent 指导见 [`docs/extending-agents.md`](./extending-agents.md)。
 
 ---
 
-## 6. 关键平台组件
+## 8. 关键平台组件
 
-### 6.1 `AgentDefinition` + `AgentRegistry`
+### 8.1 `AgentDefinition` + `AgentRegistry`
 
 **依赖与运行期裁剪**：
 
 - **注册时**：`create_runtime()` 注入 `validate_agent_dependencies`，`register()` 前核对声明 ⊆ 全局 skill/MCP 池。
-- **运行时**：`AgentScope`（`current_agent_scope`）在 `agent_execution()` / `generate_once` / `AgentRuntime.run()` 激活；MCP = 平台已启用工具 ∩ 该 Agent 的 `mcp_tool_names`；skill overlay = 该 Agent 的 `skill_mode_map`（正文仍从全局 skill 目录按 id 加载）。全局合并的 `mode_to_skill_id` 仅用于目录/运维，**不**驱动 Agent prompt。
+- **运行时**：`AgentScope`（`current_agent_scope`）在 `agent_execution()` / `generate_once` / `AgentRuntime.run()` 激活；MCP = 平台已启用工具 ∩ 该 Agent 的 `mcp_tool_names`；skill overlay = 该 Agent 的 `skill_mode_map`。
 
-```python
-# 推荐：经 create_runtime 注册（内置校验）
-from agent_platform.runtime import create_runtime
-
-runtime = create_runtime()  # 内部 register 内置/发现的 Agent 时已校验依赖
-
-# 第三方 Agent manifest 示例
-from agent_platform.core.registry import AgentDefinition, AgentRegistry, AgentCapability
-from agent_platform.skills.bundle import with_skill_bundle
-
-def register(reg: AgentRegistry) -> None:
-    defn = AgentDefinition(
-        id="my-agent",
-        display_name="My Agent",
-        description="...",
-        request_model=MyRequest,
-        response_model=MyResponse,
-        capabilities=[AgentCapability.CHAT, AgentCapability.TOOL_USING],
-        runner=my_runner,
-        mcp_tool_names=["web_search"],  # 须在 tools_server 中存在
-    )
-    reg.register(with_skill_bundle(defn, bundle_key="my-agent"))  # skills 从 SKILL.md 自动识别
-```
-
-业务入口须在 **`agent_execution(defn)`** 或 `generate_once` / `AgentRuntime.run` 内激活 `AgentScope`；否则 skill overlay 与 MCP 裁剪不生效。
-
-### 6.2 Skills 与 MCP：全局池 + Agent 白名单
+### 8.2 Skills 与 MCP：全局池 + Agent 白名单
 
 | 资源 | 全局池（登记 / 目录） | Agent 声明（`AgentDefinition`） | 运行期（`AgentScope`） |
 |------|----------------------|----------------------------------|------------------------|
-| **MCP 工具** | `tools_server/registry.py` | `mcp_tool_names` | 暴露给 LLM = 平台已启用 ∩ `mcp_tool_names`；`execute` 越权拒绝 |
-| **Skill 正文** | `skills.loader` 合并各 bundle（按 id 读文件） | `skills` + `skill_mode_map`（`with_skill_bundle` 填充） | overlay 只用本 Agent 的 `skill_mode_map`，不用全局 `mode_to_skill_id` |
+| **MCP 工具** | `tools_server/registry.py` | `mcp_tool_names` | 暴露给 LLM = 平台已启用 ∩ `mcp_tool_names` |
+| **Skill 正文** | `skills.loader` 合并各 bundle | `skills` + `skill_mode_map` | overlay 只用本 Agent 的 `skill_mode_map` |
 
-**Skill id 真源**：各 `SKILL.md` frontmatter 的 `name`；`manifest.json` 的 `skills[]` **只写 `path`**（禁止写 `id`，加载时自动解析）。
-
-**`RECAP_SKILL_EXTRA_DIRS`**：向全局 skill **目录**追加条目；要改变某 Agent 的 mode→skill 映射，改该 Agent 的 bundle 或 `RECAP_SKILL_ID`（须在 `skills` 白名单内）。
-
-### 6.3 `Pipeline[StateT]` + `Phase[StateT]`
+### 8.3 `Pipeline[StateT]` + `Phase[StateT]`
 
 ```python
 from agent_platform.core.orchestration import Pipeline, Phase
@@ -188,17 +329,7 @@ pipeline.execute(state)            # 同步
 list(pipeline.stream(state))       # NDJSON 流
 ```
 
-### 6.4 `SideEffectBus`
-
-```python
-from agent_platform.core.orchestration import SideEffectBus, StandardEvent
-
-bus = SideEffectBus()
-bus.subscribe(StandardEvent.RUN_COMPLETED, lambda ctx: push_to_wecom(ctx))
-bus.subscribe(StandardEvent.RUN_PERSISTED, lambda ctx: run_backtest(ctx))
-```
-
-### 6.5 `AgentRuntime`
+### 8.4 `AgentRuntime`
 
 ```python
 from agent_platform.runtime import create_runtime
@@ -213,49 +344,21 @@ resp = runtime.run(
 )
 ```
 
-### 6.5 MCP-Only 工具栈
+---
 
-- `core.ports.mcp_tool.McpClientPort` 是唯一工具通道；
-- `infra/mcp_client/stdio.StdioMcpClient` 是默认实现（本地子进程跑 `tools_server`）；
-- `infra/mcp_client/http.HttpMcpClient` 与 `MultiMcpRouter` 留作后续 commit；
-- 工具治理（白名单 / 角色 / per-tool budget / 审计 / 超时）由 `runtime.McpToolGateway`
-  在 Port 外围统一包装（**当前**：现有 `RecapToolRunner` 仍承担此职责，未来 commit 抽出）。
+## 9. 迁移路线图
+
+| 阶段 | 内容 | 状态 |
+|------|------|------|
+| W1-W7 | 结构重构 → MCP → 物理迁入 → Phase 类化 → WeCom/QQ → 自动装配 → 删 shim | ✅ 已完成 |
+| W8 | core/infra/agent 独立打包 + DI + entry_points 自动发现 | ✅ 已完成 |
+| W9 | AgentApp standalone bootstrap + 零 infra 引用 | ✅ 已完成 |
 
 ---
 
-## 7. 迁移路线图（refactor/v2-platform 分支）
+## 10. 参考
 
-| 阶段 | 内容 | 当前状态 |
-|------|------|----------|
-| **W1：结构重构** | 新顶层包骨架 + Ports + Pipeline + Registry + Bus + 入口适配 + WeCom/QQ 骨架 + 文档 + import-linter | ✅ 已完成 |
-| **W2：MCP 物理切换** | `tools_server` 独一真实源；`RecapToolRunner` → `McpToolGateway` | ✅ 已完成 |
-| **W3：recap 物理迁入 `agents/stock_recap/`** | data / llm / effects / prompts / skills / cli / http_routes | ✅ 已完成 |
-| **W4：recap 类化为 `Phase`** | `_phase_*` → Phase 子类；`pipeline_v2` 并行入口 | ✅ 已完成 |
-| **W5：WeCom/QQ SDK 接入** | botpy WS + 企微 AES webhook | ✅ 已完成 |
-| **W6：CLI/HTTP/Scheduler 自动装配** | `AgentRegistry` 驱动，无硬编码 AGENTS | ✅ 已完成 |
-| **W7：删 deprecation shim** | 全库 canonical import；CI `lint-imports` | ✅ 已完成 |
-
----
-
-## 8. 与原 4 层对照表
-
-| 原 4 层 | v2 新位置 | 说明 |
-|---------|----------|------|
-| `interfaces/` | `adapters/` | 入口适配器；新增 `wecom/` `qq/` |
-| `application/recap.py` | `agents/stock_recap/manifest.py` 调用 | recap 入口收敛到 Agent manifest |
-| `application/orchestration/` | `core/orchestration/`（泛型）+ `agents/stock_recap/`（recap 专用） | 编排引擎与具体 Agent 解耦 |
-| `application/side_effects/` | `core/orchestration/side_effects_bus`（机制）+ `agents/stock_recap/effects/`（订阅） | 副作用走总线 |
-| `domain/` | `core/runtime/`（平台类型）+ `agents/stock_recap/domain/`（业务类型） | 拆分中 |
-| `infrastructure/` | `infra/` | 别名等价；后续物理迁移 |
-| `observability/` | `runtime/observability/`（W1 仍保持老路径） | |
-| `policy/` | 通用部分 → `infra/guardrail/`；recap 输出规则 → `agents/stock_recap/` | |
-| `presentation/` | `agents/<id>/render.py`（每 Agent 自带） | |
-| `interfaces/mcp_stdio.py` | `tools_server/server.py` + `adapters/mcp_stdio/` | 工具服务 vs Agent 服务分开 |
-
----
-
-## 9. 参考
-
-- `docs/ADR/ADR-001-v2-platformization.md` — 本次重构的决策记录
-- `docs/extending-agents.md` — 新增 Agent 操作手册
-- `docs/ARCHITECTURE_AND_BUSINESS.md` — stock-recap 业务说明（与本文互补）
+- [`docs/ARCHITECTURE_AND_BUSINESS.md`](./ARCHITECTURE_AND_BUSINESS.md) — stock-recap 业务说明
+- [`docs/extending-agents.md`](./extending-agents.md) — 新增 Agent 操作手册
+- [`docs/packaging.md`](./packaging.md) — 打包与发布指南
+- [`docs/ADR/ADR-001-v2-platformization.md`](./ADR/ADR-001-v2-platformization.md) — 决策记录

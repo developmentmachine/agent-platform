@@ -12,11 +12,11 @@ import json
 import logging
 from typing import Any, List
 
+from agent_platform.core.utils import stable_json as _stable_json
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from agent_platform.application.side_effects import deferred as _deferred  # noqa: F401  注册 outbox handler
 from agent_platform.application.side_effects import outbox
 from agent_platform.config.settings import Settings
 from agent_platform.core.registry.agent_definition import ScheduledJob
@@ -24,8 +24,6 @@ from agent_platform.core.registry.agent_definition import ScheduledJob
 logger = logging.getLogger("agent_platform.scheduler")
 
 
-def _stable_json(obj: Any) -> str:
-    return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def _run_outbox_sweep(settings: Settings) -> None:

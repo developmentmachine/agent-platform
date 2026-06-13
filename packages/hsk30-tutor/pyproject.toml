@@ -1,0 +1,27 @@
+[project]
+name = "agent-platform-hsk30-tutor"
+version = "0.1.0"
+description = "HSK 3.0 Chinese Tutor Agent — standalone package"
+requires-python = ">=3.10"
+dependencies = [
+    "agent-platform-core>=0.1.0",
+    "agent-platform-infra>=0.1.0",
+    "fastapi>=0.110.0",
+    "openai>=1.40.0",
+]
+
+[project.scripts]
+hsk30-tutor = "agent_platform.agents.hsk30_tutor.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_platform"]
+only-include = [
+    "src/agent_platform/agents/hsk30_tutor",
+]
+
+[project.entry-points."agent_platform.agents"]
+hsk30-tutor = "agent_platform.agents.hsk30_tutor.manifest:register"

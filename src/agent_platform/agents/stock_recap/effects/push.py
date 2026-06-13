@@ -15,21 +15,28 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
+from agent_platform.core.utils import stable_json as _stable_json
+from agent_platform.core.ports.repository import RepositoryFactoryPort
 from agent_platform.config.settings import Settings
 from agent_platform.domain.models import Recap
-from agent_platform.infra.persistence.db import (
-    get_push_log,
-    upsert_push_log,
+from agent_platform.agents.stock_recap.render import (
+    render_markdown_for_wechat_work,
+    render_wechat_text,
 )
-from agent_platform.infra.push import get_push_provider
 
 logger = logging.getLogger("agent_platform.side_effects.push")
 
 
-def _stable_json(obj: Any) -> str:
-    return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+def _resolve_push_provider(settings, *, push_provider_factory=None, **kwargs):
+    """Resolve push provider using injected factory, or return None.
+
+    The factory is injected via configure_default_deps(push_provider_factory=...).
+    """
+    if push_provider_factory is not None:
+        return push_provider_factory(settings, **kwargs)
+    return None
 
 
 def _utc_now_iso() -> str:
@@ -42,27 +49,34 @@ def _channel_name(settings: Settings) -> str:
         return "wxwork"
     return "noop"
 
-
 def push_recap(
     settings: Settings,
     recap: Recap,
     *,
     request_id: Optional[str] = None,
+    repo_factory: Optional[RepositoryFactoryPort] = None,
+    push_provider_factory: Optional[Callable[..., Any]] = None,
 ) -> bool:
     """按配置将 ``recap`` 推送到外部通道；未启用 / 失败 / 重复请求时返回 False。
 
     ``request_id`` 为空时退化为非幂等推送（仅用于 ad-hoc 调试场景）。
     """
-    provider = get_push_provider(settings)
+    provider = _resolve_push_provider(
+        settings,
+        push_provider_factory=push_provider_factory,
+        render_markdown=render_markdown_for_wechat_work,
+        render_text=render_wechat_text,
+    )
     if provider is None:
         return False
 
     channel = _channel_name(settings)
 
     # 幂等检查：仅当业务侧给了 request_id 才生效。
-    if request_id:
+    if request_id and repo_factory is not None:
         try:
-            existing = get_push_log(settings.db_path, request_id=request_id, channel=channel)
+            push_log_repo = repo_factory.push_log_repository()
+            existing = push_log_repo.get(request_id=request_id, channel=channel)
         except Exception as e:
             # push_log 查询失败不应阻塞推送（兼容老库）；但要告警。
             logger.warning(
@@ -76,7 +90,6 @@ def push_recap(
                 )
             )
             existing = None
-
         if existing and existing.get("status") in ("sent", "skipped"):
             logger.info(
                 _stable_json(
@@ -108,10 +121,10 @@ def push_recap(
             )
         )
 
-    if request_id:
+    if request_id and repo_factory is not None:
         try:
-            upsert_push_log(
-                settings.db_path,
+            push_log_repo = repo_factory.push_log_repository()
+            push_log_repo.upsert(
                 request_id=request_id,
                 channel=channel,
                 status="sent" if ok else "failed",

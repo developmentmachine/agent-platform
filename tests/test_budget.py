@@ -11,8 +11,6 @@
 from __future__ import annotations
 
 import time
-from typing import Dict, List, Tuple
-
 import pytest
 
 from agent_platform.core.runtime.budget import AgentBudget
@@ -22,8 +20,6 @@ from agent_platform.config.settings import Settings
 from agent_platform.domain.models import (
     GenerateRequest,
     LlmBudgetExceeded,
-    LlmTokens,
-    Recap,
 )
 from agent_platform.domain.run_context import RunContext
 from agent_platform.runtime.observability.runtime_context import current_budget
@@ -143,7 +139,6 @@ def test_check_budget_between_phases_skips_act_and_critique(
 def test_act_phase_handles_budget_exceeded_gracefully(monkeypatch: pytest.MonkeyPatch) -> None:
     """provider 抛 ``LlmBudgetExceeded`` 时 act 节点不应让整个 pipeline 崩。"""
     from agent_platform.agents.stock_recap import legacy_pipeline as pipeline_mod
-    from agent_platform.infra.llm import backends as backends_mod
 
     s = _settings(monkeypatch)
     state = RecapAgentRunState(
@@ -162,15 +157,11 @@ def test_act_phase_handles_budget_exceeded_gracefully(monkeypatch: pytest.Monkey
     state.features = Features()
     state.messages = [{"role": "user", "content": "hi"}]
 
-    class _BudgetExceededProvider:
-        name = "budget-exceeded-fake"
+    # _phase_act now uses state.llm_caller instead of backends_mod.resolve_provider
+    def _budget_exceeded_caller(**_kwargs):
+        raise LlmBudgetExceeded("tool_calls", limit=4, used=5)
 
-        def call(self, *args, **kwargs) -> Tuple[Recap, LlmTokens]:
-            raise LlmBudgetExceeded("tool_calls", limit=4, used=5)
-
-    monkeypatch.setattr(
-        backends_mod, "resolve_provider", lambda _name: _BudgetExceededProvider()
-    )
+    state.llm_caller = _budget_exceeded_caller
 
     class _NoopTracer:
         def start_as_current_span(self, *_a, **_kw):

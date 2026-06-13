@@ -53,9 +53,23 @@ def _settings(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Settings:
     }.items():
         monkeypatch.setenv(k, v)
     from agent_platform.infra.persistence.db import init_db
+    from agent_platform.agents.stock_recap.deps import configure_default_deps
 
     s = Settings()
     init_db(s.db_path)
+    from agent_platform.infra.persistence.factory import SqliteRepositoryFactory
+    rf = SqliteRepositoryFactory(s.db_path)
+    configure_default_deps(
+        repo_factory=rf,
+        guardrail=type("_NoopGR", (), {
+            "validate_generate_request": lambda self, req: None,
+            "validate_feedback_request": lambda self, req: None,
+            "pre_input": lambda self, text, **kw: text,
+            "post_output": lambda self, text, **kw: text,
+            "clamp_messages": lambda self, msgs, **kw: msgs,
+            "coerce_recap_output": lambda self, recap, *a, **kw: recap,
+        })(),
+    )
     return s
 
 

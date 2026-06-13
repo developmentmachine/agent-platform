@@ -17,10 +17,7 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-from agent_platform.infra.persistence.db import (
-    load_active_experiment,
-    load_experiment_variants,
-)
+from agent_platform.core.ports.repository import RepositoryFactoryPort
 
 logger = logging.getLogger("agent_platform.agents.stock_recap.experiments")
 
@@ -43,7 +40,7 @@ def _bucket_index(stickiness_key: str, experiment_id: str, total_weight: int) ->
 
 
 def select_variant(
-    db_path: str,
+    repo_factory: RepositoryFactoryPort,
     *,
     mode: str,
     stickiness_key: Optional[str],
@@ -52,11 +49,12 @@ def select_variant(
     if not stickiness_key:
         return None
     try:
-        exp = load_active_experiment(db_path, mode=mode)
+        exp_repo = repo_factory.experiment_repository()
+        exp = exp_repo.load_active(mode=mode)
         if not exp:
             return None
-        variants = load_experiment_variants(
-            db_path, experiment_id=str(exp["experiment_id"])
+        variants = exp_repo.load_variants(
+            experiment_id=str(exp["experiment_id"])
         )
         if not variants:
             return None

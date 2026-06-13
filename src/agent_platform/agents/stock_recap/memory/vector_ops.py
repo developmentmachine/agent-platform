@@ -3,12 +3,11 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from agent_platform.config.settings import Settings
+from agent_platform.core.ports.memory import EmbeddingsPort, VectorStorePort
 from agent_platform.domain.models import Features, MarketSnapshot, Mode, Recap, RecapDaily, RecapStrategy
-from agent_platform.infra.memory.embeddings_openai import OpenAIEmbeddingProvider
-from agent_platform.infra.memory.qdrant_store import QdrantVectorStore
 
 logger = logging.getLogger("agent_platform.memory.vector_ops")
 
@@ -41,6 +40,38 @@ def build_embedding_query_text(
     return "\n".join(parts)
 
 
+def create_memory_ports(
+    settings: Settings,
+    *,
+    memory_factory: Optional[Callable[..., Tuple[EmbeddingsPort, VectorStorePort]]] = None,
+) -> Tuple[EmbeddingsPort, VectorStorePort]:
+    """工厂函数：从 settings 创建具体的 embedding 和 vector-store 实例。
+
+    优先使用注入的 ``memory_factory``（通过 configure_default_deps 设置）；
+    否则回退到默认的 OpenAI + Qdrant 实现。
+    """
+    if memory_factory is not None:
+        return memory_factory(settings)
+    # No factory configured — return no-op stubs so vector memory is silently disabled.
+    # The caller (recall_vector_memory / index_recap_for_memory) checks vector_stack_ready
+    # first, so these stubs should never actually be exercised in production.
+    return _NoopEmbeddings(), _NoopVectorStore()
+
+
+class _NoopEmbeddings:
+    """Stub EmbeddingsPort — raises on use; should never be reached if vector_stack_ready is checked."""
+    def embed(self, texts: Sequence[str]) -> List[List[float]]:
+        raise RuntimeError("No memory_factory configured — embeddings unavailable")
+
+
+class _NoopVectorStore:
+    """Stub VectorStorePort — raises on use; should never be reached if vector_stack_ready is checked."""
+    def query(self, vector: Sequence[float], *, top_k: int = 5, collection: Optional[str] = None, filter: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        raise RuntimeError("No memory_factory configured — vector store unavailable")
+    def upsert(self, items: Sequence[Dict[str, Any]], *, collection: Optional[str] = None) -> None:
+        raise RuntimeError("No memory_factory configured — vector store unavailable")
+
+
 def recall_vector_memory(
     settings: Settings,
     *,
@@ -48,6 +79,8 @@ def recall_vector_memory(
     mode: Mode,
     snapshot: MarketSnapshot,
     features: Features,
+    embeddings: Optional[EmbeddingsPort] = None,
+    vector_store: Optional[VectorStorePort] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
     """返回 (long_memory_blocks, entity_memory_blocks, meta)。"""
     ok, reason = vector_stack_ready(settings)
@@ -60,16 +93,20 @@ def recall_vector_memory(
     if not ok:
         return [], [], meta
 
+    # 如果调用方没有注入 port，用工厂创建
+    if embeddings is None or vector_store is None:
+        emb, store = create_memory_ports(settings)
+    else:
+        emb, store = embeddings, vector_store
+
     qtext = build_embedding_query_text(snapshot, features, mode)
     try:
-        store = QdrantVectorStore(settings)
-        emb = OpenAIEmbeddingProvider(settings)
         (qv,) = emb.embed([qtext])
         tk = _tenant_key(tenant_id)
         long_raw = store.query(
             vector=qv,
-            limit=max(1, int(settings.vector_recall_top_k)),
-            filter_must={
+            top_k=max(1, int(settings.vector_recall_top_k)),
+            filter={
                 "tenant_id": tk,
                 "mode": str(mode),
                 "memory_kind": "recap_run",
@@ -77,8 +114,8 @@ def recall_vector_memory(
         )
         ent_raw = store.query(
             vector=qv,
-            limit=max(1, int(settings.vector_entity_top_k)),
-            filter_must={"tenant_id": tk, "memory_kind": "entity_anchor"},
+            top_k=max(1, int(settings.vector_entity_top_k)),
+            filter={"tenant_id": tk, "memory_kind": "entity_anchor"},
         )
     except Exception as e:
         logger.warning(
@@ -141,14 +178,21 @@ def index_recap_for_memory(
     request_id: str,
     mode: Mode,
     recap: Recap,
+    embeddings: Optional[EmbeddingsPort] = None,
+    vector_store: Optional[VectorStorePort] = None,
 ) -> None:
     ok, reason = vector_stack_ready(settings)
     if not ok:
         logger.debug("skip vector index: %s", reason)
         return
+
+    # 如果调用方没有注入 port，用工厂创建
+    if embeddings is None or vector_store is None:
+        emb, store = create_memory_ports(settings)
+    else:
+        emb, store = embeddings, vector_store
+
     try:
-        store = QdrantVectorStore(settings)
-        emb = OpenAIEmbeddingProvider(settings)
         main = _recap_to_index_text(recap)
         vec = emb.embed([main])[0]
         tk = _tenant_key(tenant_id)
@@ -191,7 +235,7 @@ def index_recap_for_memory(
                                 },
                             }
                         )
-        store.upsert(points=points)
+        store.upsert(items=points)
     except Exception as e:
         logger.warning(
             json.dumps(
@@ -203,6 +247,7 @@ def index_recap_for_memory(
 
 __all__ = [
     "build_embedding_query_text",
+    "create_memory_ports",
     "index_recap_for_memory",
     "recall_vector_memory",
     "vector_stack_ready",

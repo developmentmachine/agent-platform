@@ -12,7 +12,9 @@ from agent_platform.agents.hsk30_tutor.use_case import chat_turn
 from agent_platform.config.settings import Settings
 from agent_platform.core.runtime.principal import PrincipalContext
 from agent_platform.core.runtime.run_context import RunContext
-from agent_platform.runtime.factory import create_runtime
+def _create_runtime(settings=None):
+    from agent_platform.runtime.factory import create_runtime as _factory_create
+    return _factory_create(settings)
 
 _HELP = """
 命令（以 / 开头）：
@@ -79,7 +81,7 @@ def _turn(
         explain_locale=locale,  # type: ignore[arg-type]
     )
     if use_runtime:
-        runtime = create_runtime(settings)
+        runtime = _create_runtime(settings)
         principal = PrincipalContext.anonymous(source="cli")
         envelope = runtime.run(
             agent_id="hsk30-tutor",

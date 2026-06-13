@@ -14,15 +14,13 @@ import json
 import logging
 from typing import Any, Dict
 
-from agent_platform.application.side_effects import outbox
+from agent_platform.core.utils import stable_json as _stable_json
 from agent_platform.agents.stock_recap.effects.backtest import try_run_backtest
 from agent_platform.agents.stock_recap.effects.evolution import run_deferred_evolution
 
 logger = logging.getLogger("agent_platform.side_effects.deferred")
 
 
-def _stable_json(obj: Any) -> str:
-    return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 # ─── outbox handler 注册 ─────────────────────────────────────────────────────
@@ -50,8 +48,21 @@ def _handle_backtest(payload: Dict[str, Any]) -> None:
     try_run_backtest(s.db_path, trade_date)
 
 
-outbox.register_handler("evolution", _handle_evolution)
-outbox.register_handler("backtest", _handle_backtest)
+# ─── outbox handler 注册 ─────────────────────────────────────────────────────
+
+
+_outbox_initialized = False
+
+
+def _ensure_outbox_handlers() -> None:
+    """Register outbox handlers once."""
+    global _outbox_initialized
+    if _outbox_initialized:
+        return
+    from agent_platform.application.side_effects import outbox
+    outbox.register_handler("evolution", _handle_evolution)
+    outbox.register_handler("backtest", _handle_backtest)
+    _outbox_initialized = True
 
 
 # ─── 主入口 ──────────────────────────────────────────────────────────────────
@@ -68,7 +79,9 @@ def run_deferred_post_recap(
     入队即返回；任何失败仅记录 warning，不向上抛——保证对主响应的可观察性与时延稳定。
     """
     from agent_platform.config.settings import get_settings
+    from agent_platform.application.side_effects import outbox
 
+    _ensure_outbox_handlers()
     s = get_settings()
     outbox.enqueue(
         s.db_path,

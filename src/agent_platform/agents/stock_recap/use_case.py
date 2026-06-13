@@ -15,26 +15,46 @@ from agent_platform.agents.stock_recap.legacy_pipeline import (
     execute_recap_pipeline,
     iter_recap_agent_ndjson,
 )
-from agent_platform.application.side_effects import run_deferred_post_recap, try_run_backtest
+from agent_platform.agents.stock_recap.effects.deferred import run_deferred_post_recap
+from agent_platform.agents.stock_recap.effects.backtest import try_run_backtest
 from agent_platform.config.settings import Settings
 from agent_platform.domain.models import GenerateRequest, GenerateResponse
 from agent_platform.domain.run_context import RunContext
-from agent_platform.runtime.observability.runtime_context import current_budget, current_run_context
-from agent_platform.runtime.scope import agent_execution
+from agent_platform.core.runtime.contextvars import current_budget, current_run_context
+from agent_platform.core.runtime.agent_scope import agent_execution
+from agent_platform.core.utils import resolve_from_context
+from agent_platform.core.ports.guardrail import GuardrailPort
 
 _RECAP_AGENT_ID = "stock-recap"
-from agent_platform.runtime.observability.tracing import configure_tracing, get_tracer
-from agent_platform.infra.policy.guardrails import validate_generate_request
+from agent_platform.core.runtime.tracing import configure_tracing, get_tracer
 
 
 def _current_tenant_id() -> Optional[str]:
     """从 ``current_principal`` 取 tenant_id；CLI / 内部调用没有 principal 时返回 None。"""
-    try:
-        from agent_platform.domain.principal import get_principal
+    return resolve_from_context("tenant_id")
 
-        return get_principal().tenant_id
-    except Exception:
-        return None
+
+def _resolve_deps(
+    guardrail: Optional[GuardrailPort],
+    repo_factory=None,
+):
+    """Resolve deps: use provided values or fall back to default_deps()."""
+    from agent_platform.agents.stock_recap.deps import default_deps
+
+    if guardrail is not None and repo_factory is not None:
+        return guardrail, repo_factory
+    d = default_deps()
+    return guardrail or d.guardrail, repo_factory or d.repo_factory
+
+
+def _resolve_full_deps(guardrail=None, repo_factory=None):
+    """Resolve guardrail, repo_factory, and optional callable deps from default_deps()."""
+    from agent_platform.agents.stock_recap.deps import default_deps
+
+    d = default_deps()
+    gr = guardrail or d.guardrail
+    rf = repo_factory or d.repo_factory
+    return gr, rf, d.memory_factory, d.llm_caller, d.push_provider_factory
 
 
 def generate_once(
@@ -43,6 +63,8 @@ def generate_once(
     ctx: Optional[RunContext] = None,
     *,
     defer_evolution_backtest: bool = False,
+    guardrail: Optional[GuardrailPort] = None,
+    repo_factory=None,
 ) -> GenerateResponse:
     """
     单次生成流程：采集 → 特征 → prompt → LLM → 评测 → 持久化 → 推送。
@@ -51,8 +73,9 @@ def generate_once(
     ``defer_evolution_backtest=True`` 时不在本调用内执行进化检查与策略回测（供 HTTP
     层用 BackgroundTasks 延后执行，以缩短响应尾部延迟）；推送仍在请求内完成。
     """
+    gr, rf, mem_factory, llm_caller, push_factory = _resolve_full_deps(guardrail, repo_factory)
     configure_tracing(settings)
-    validate_generate_request(req)
+    gr.validate_generate_request(req)
 
     from agent_platform.agents.stock_recap.manifest import _build_definition
 
@@ -74,6 +97,11 @@ def generate_once(
             run_ctx=run_ctx,
             t0=t0,
             defer_evolution_backtest=defer_evolution_backtest,
+            guardrail=gr,
+            repo_factory=rf,
+            memory_factory=mem_factory,
+            llm_caller=llm_caller,
+            push_provider_factory=push_factory,
         )
         budget_token = current_budget.set(state.budget)
 
@@ -103,6 +131,8 @@ def iter_generate_ndjson(
     ctx: Optional[RunContext] = None,
     *,
     defer_evolution_backtest: bool = True,
+    guardrail: Optional[GuardrailPort] = None,
+    repo_factory=None,
 ) -> Iterator[str]:
     """
     产出 NDJSON 行（``meta``、各 ``phase``、``result``），供 HTTP 流式端点使用。
@@ -111,8 +141,9 @@ def iter_generate_ndjson(
     不在此路径上设置 ``ContextVar``/父 span：``StreamingResponse`` 可能在线程池中
     迭代生成器，跨线程 attach/detach 会失败；``meta``/``result`` 中仍含 request_id。
     """
+    gr, rf, mem_factory, llm_caller, push_factory = _resolve_full_deps(guardrail, repo_factory)
     configure_tracing(settings)
-    validate_generate_request(req)
+    gr.validate_generate_request(req)
 
     from agent_platform.agents.stock_recap.manifest import _build_definition
 
@@ -134,6 +165,11 @@ def iter_generate_ndjson(
             run_ctx=run_ctx,
             t0=t0,
             defer_evolution_backtest=defer_evolution_backtest,
+            guardrail=gr,
+            repo_factory=rf,
+            memory_factory=mem_factory,
+            llm_caller=llm_caller,
+            push_provider_factory=push_factory,
         )
         prev_budget = current_budget.get()
         current_budget.set(state.budget)

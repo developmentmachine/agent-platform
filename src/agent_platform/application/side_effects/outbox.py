@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
+from agent_platform.core.utils import resolve_from_context, stable_json as _stable_json
 from agent_platform.infra.persistence.db import (
     claim_due_pending_actions,
     enqueue_pending_action,
@@ -65,8 +66,6 @@ def _iso(dt: datetime) -> str:
     return dt.isoformat(timespec="seconds")
 
 
-def _stable_json(obj: Any) -> str:
-    return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def _backoff_seconds(next_attempt_no: int) -> float:
@@ -87,21 +86,8 @@ def get_registered_handlers() -> Dict[str, ActionHandler]:
 
 
 def _resolve_tenant_id() -> Optional[str]:
-    """Outbox 入队时显式没传就从 ``current_run_context`` / ``current_principal`` 推断。"""
-    try:
-        from agent_platform.runtime.observability.runtime_context import current_run_context
-
-        ctx = current_run_context.get()
-        if ctx is not None and getattr(ctx, "tenant_id", None):
-            return ctx.tenant_id
-    except Exception:
-        pass
-    try:
-        from agent_platform.domain.principal import get_principal
-
-        return get_principal().tenant_id
-    except Exception:
-        return None
+    """Outbox 入队时显式没传就从 ``current_principal`` / ``domain.principal`` 推断。"""
+    return resolve_from_context("tenant_id")
 
 
 def enqueue(
