@@ -112,9 +112,11 @@ def cli_main() -> int:
         try:
             from agent_platform.infra.persistence.factory import SqliteRepositoryFactory
             from agent_platform.infra.policy import GuardrailAdapter
+            from agent_platform.infra.llm.backends import call_llm
             configure_default_deps(
                 repo_factory=SqliteRepositoryFactory(settings.db_path),
                 guardrail=GuardrailAdapter(),
+                llm_caller=call_llm,
                 init_db=init_db,
             )
         except ImportError:
