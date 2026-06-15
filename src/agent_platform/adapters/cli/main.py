@@ -101,6 +101,25 @@ def cli_main() -> int:
     configure_tracing(settings)
     init_db(settings.db_path)
 
+    # Bootstrap stock-recap deps if the agent needs them (idempotent).
+    try:
+        from agent_platform.agents.stock_recap.deps import (
+            configure_default_deps,
+            default_deps,
+        )
+        default_deps()  # already configured?
+    except (RuntimeError, ImportError):
+        try:
+            from agent_platform.infra.persistence.factory import SqliteRepositoryFactory
+            from agent_platform.infra.policy import GuardrailAdapter
+            configure_default_deps(
+                repo_factory=SqliteRepositoryFactory(settings.db_path),
+                guardrail=GuardrailAdapter(),
+                init_db=init_db,
+            )
+        except ImportError:
+            pass  # stock-recap not installed; skip
+
     defn = registry.get(args.agent)
     assert defn.cli_run_handler is not None
     return defn.cli_run_handler(args, settings, subparser_map[args.agent])
