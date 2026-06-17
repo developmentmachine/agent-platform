@@ -1,10 +1,12 @@
-# .pre-commit-config.yaml 示例
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.3.0
+    rev: v0.9.9
     hooks:
-      - id: ruff # 传统 Python 代码 Lint
-  - repo: https://github.com/hermes-labs-ai/lintlang
-    rev: v1.2.0
+      - id: ruff
+  - repo: local
     hooks:
-      - id: lintlang # Agent 提示词与工具 Schema Lint
+      - id: lintlang
+        name: lintlang
+        entry: uv run lintlang scan --fail-on fail
+        language: system
+        types_or: [yaml, json, markdown, text]
