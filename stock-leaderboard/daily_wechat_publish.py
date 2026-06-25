@@ -31,12 +31,33 @@ DOTENV_PATH = PROJECT_DIR / ".env"
 
 
 def _load_dotenv_fallback() -> None:
-    """环境变量优先；仅对未设置的键从 .env 补全（不覆盖已有环境变量）。"""
-    if DOTENV_PATH.is_file():
-        load_dotenv(DOTENV_PATH, override=False)
+    """环境变量优先；先从 root .env 加载，再从项目 .env 补全未设置的键。"""
+    # Try root .env first
+    root_env = PROJECT_DIR.parent / ".env"
+    if root_env.is_file():
+        load_dotenv(root_env, override=False)
+    # Fallback to project-level .env for any missing vars
+    proj_env = PROJECT_DIR / ".env"
+    if proj_env.is_file() and proj_env != root_env:
+        load_dotenv(proj_env, override=False)
 
 
 _load_dotenv_fallback()
+
+# ─── LLM Provider ────────────────────────────────────────────────────────────
+# 优先使用 DeepSeek（如有配置），其次才是 OpenAI
+_ds_key = os.environ.get("DEEPSEEK_API_KEY", "")
+_ds_base = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+if _ds_key:
+    os.environ["OPENAI_API_KEY"] = _ds_key
+    os.environ["OPENAI_BASE_URL"] = _ds_base
+    os.environ.setdefault("RECAP_MODEL", "deepseek-chat")
+else:
+    _openai_base = os.environ.get("OPENAI_BASE_URL", "")
+    _openai_key = os.environ.get("OPENAI_API_KEY", "")
+    _is_mimo = any(p in _openai_base for p in ("mimo", "xiaomimimo", "tp-cw5")) or _openai_key.startswith("tp-")
+    if _is_mimo or not _openai_key:
+        print("警告: 未配置 DEEPSEEK_API_KEY 且 OPENAI_API_KEY 不可用，请检查 .env 配置", file=sys.stderr)
 
 # MIMO LLM structured output retries can be slow; give 10 min budget
 os.environ.setdefault("RECAP_AGENT_MAX_WALL_MS", "600000")
@@ -81,7 +102,7 @@ def run_cmd(
     result = subprocess.run(
         cmd,
         stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
         text=True,
         cwd=cwd,
         timeout=1800,
@@ -89,7 +110,7 @@ def run_cmd(
         env=env,
     )
     if result.returncode != 0:
-        log(f"失败 (rc={result.returncode}): {result.stdout[:500]}")
+        log(f"失败 (rc={result.returncode}): stdout={result.stdout[:300]} stderr={result.stderr[:300]}")
         return False, result.stdout
     return True, result.stdout
 
@@ -136,10 +157,12 @@ def _uv_subprocess_env() -> dict[str, str]:
 def _venv_is_ready(python: Path) -> bool:
     if not python.is_file():
         return False
-    ok, _ = run_cmd(
+    ok, output = run_cmd(
         [str(python), "-c", "import agent_platform"],
         cwd=str(PROJECT_DIR),
     )
+    if not ok:
+        log(f"venv 不可用: {output[:200]}")
     return ok
 
 
@@ -147,11 +170,18 @@ def _bootstrap_project_venv(uv_bin: str) -> Path:
     """用 uv 创建项目 .venv 并 editable 安装。"""
     python = _project_venv_python()
     log("初始化项目 Python 环境 (.venv)...")
-    run_cmd([uv_bin, "venv", ".venv"], cwd=str(PROJECT_DIR), env=_uv_subprocess_env())
-    ok, _ = run_cmd([str(python), "-m", "pip", "install", "-e", "."], cwd=str(PROJECT_DIR))
-    if not ok or not python.is_file():
-        log("❌ 无法创建 .venv 环境，请手动安装 uv 或创建 venv")
+    # --clear handles the case where .venv already exists but is broken
+    run_cmd([uv_bin, "venv", ".venv", "--clear"], cwd=str(PROJECT_DIR), env=_uv_subprocess_env())
+    if not python.is_file():
+        log("❌ venv 创建后 python 不存在")
         sys.exit(1)
+    ok, _ = run_cmd([str(python), "-m", "pip", "install", "-e", "."], cwd=str(PROJECT_DIR))
+    if not ok:
+        # Try uv sync as fallback
+        ok2, _ = run_cmd([uv_bin, "sync"], cwd=str(PROJECT_DIR), env=_uv_subprocess_env())
+        if not ok2:
+            log("❌ 无法安装项目依赖（pip install -e . 和 uv sync 均失败）")
+            sys.exit(1)
     log(f"已初始化: {python}")
     return python
 
