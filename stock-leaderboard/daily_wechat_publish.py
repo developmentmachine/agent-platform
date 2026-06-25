@@ -31,15 +31,15 @@ DOTENV_PATH = PROJECT_DIR / ".env"
 
 
 def _load_dotenv_fallback() -> None:
-    """环境变量优先；先从 root .env 加载，再从项目 .env 补全未设置的键。"""
-    # Try root .env first
-    root_env = PROJECT_DIR.parent / ".env"
-    if root_env.is_file():
-        load_dotenv(root_env, override=False)
-    # Fallback to project-level .env for any missing vars
+    """环境变量优先；先加载项目 .env，再从根 .env 补全未设置的键。"""
+    # Try project-level .env first (project-specific config)
     proj_env = PROJECT_DIR / ".env"
-    if proj_env.is_file() and proj_env != root_env:
+    if proj_env.is_file():
         load_dotenv(proj_env, override=False)
+    # Fallback to root .env for any missing vars (global config)
+    root_env = PROJECT_DIR.parent / ".env"
+    if root_env.is_file() and root_env != proj_env:
+        load_dotenv(root_env, override=False)
 
 
 _load_dotenv_fallback()
