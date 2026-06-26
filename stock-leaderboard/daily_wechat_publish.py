@@ -300,7 +300,10 @@ def get_access_token() -> str:
     secret = _require_env("WECHAT_SECRET")
     url = f"https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid={appid}&secret={secret}"
     with urllib.request.urlopen(url) as r:
-        return json.loads(r.read())["access_token"]
+        result = json.loads(r.read())
+    if "access_token" not in result:
+        raise Exception(f"获取 access_token 失败: {result}")
+    return result["access_token"]
 
 def upload_image(token: str, image_path: str) -> tuple[str, str]:
     """上传图片到微信素材库，返回 (media_id, url)"""
