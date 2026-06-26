@@ -25,8 +25,28 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-PROJECT_DIR = Path(__file__).resolve().parent.parent  # agent-platform/
-LEADERBOARD_DIR = Path(__file__).resolve().parent      # stock-leaderboard/
+def _resolve_project_dir() -> Path:
+    """Resolve agent-platform project dir regardless of where this script lives."""
+    # Walk up from script location looking for pyproject.toml or src/agent_platform
+    current = Path(__file__).resolve().parent
+    for _ in range(6):
+        if (current / "pyproject.toml").is_file():
+            return current
+        if (current / "src" / "agent_platform" / "__init__.py").is_file():
+            return current
+        current = current.parent
+    # Fallback: CWD (cron sets workdir to project root) or known location
+    for candidate in [Path.cwd(), Path("/opt/data/agent-platform")]:
+        if (candidate / "pyproject.toml").is_file():
+            return candidate
+        if (candidate / "src" / "agent_platform" / "__init__.py").is_file():
+            return candidate
+    # Last resort (works when script is in stock-leaderboard/ under project)
+    raise RuntimeError("Cannot locate agent-platform project directory")
+
+
+PROJECT_DIR = _resolve_project_dir()
+LEADERBOARD_DIR = PROJECT_DIR / "stock-leaderboard"
 DOTENV_PATH = PROJECT_DIR / ".env"
 
 
@@ -177,11 +197,14 @@ def _bootstrap_project_venv(uv_bin: str) -> Path:
         sys.exit(1)
     ok, _ = run_cmd([str(python), "-m", "pip", "install", "-e", "."], cwd=str(PROJECT_DIR))
     if not ok:
-        # Try uv sync as fallback
-        ok2, _ = run_cmd([uv_bin, "sync"], cwd=str(PROJECT_DIR), env=_uv_subprocess_env())
-        if not ok2:
-            log("❌ 无法安装项目依赖（pip install -e . 和 uv sync 均失败）")
-            sys.exit(1)
+        # Fallback 1: uv pip install (handles venv without pip module)
+        ok1, _ = run_cmd([uv_bin, "pip", "install", "-e", "."], cwd=str(PROJECT_DIR), env=_uv_subprocess_env())
+        if not ok1:
+            # Fallback 2: uv sync (reads pyproject.toml)
+            ok2, _ = run_cmd([uv_bin, "sync"], cwd=str(PROJECT_DIR), env=_uv_subprocess_env())
+            if not ok2:
+                log("❌ 无法安装项目依赖（pip install -e . / uv pip install / uv sync 均失败）")
+                sys.exit(1)
     log(f"已初始化: {python}")
     return python
 
