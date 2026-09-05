@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: uv pip install --system -e ".[dev]"
 
+      - name: Run configured LintLang hook
+        run: uv run pre-commit run lintlang --all-files
+
       - name: Architecture boundaries (import-linter)
         run: lint-imports
 
